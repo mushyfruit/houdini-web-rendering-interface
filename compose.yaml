@@ -1,0 +1,46 @@
+services:
+  houdini_cp_hbuild:
+    build:
+        context: .
+        args:
+          DOWNLOAD_HOUDINI: "false"
+          SIDEFX_CLIENT: "${SIDEFX_CLIENT}"
+          SIDEFX_SECRET: "${SIDEFX_SECRET}"
+          HFS_VER: "${HFS_VER}"
+    image: hou_cp_hbuild
+    container_name: hou_container_local
+    ports:
+      - "8000:8080"
+    tty: true
+    volumes:
+      - ./project:/root/hou_webserver
+      - shared_hip_storage:/root/hip_storage
+    env_file:
+      - .env
+    depends_on:
+      - redis
+
+  redis:
+    image: "redis:latest"
+    ports:
+      - "6379:6379"
+
+  celery:
+    build:
+        context: .
+        args:
+          SIDEFX_CLIENT: "${SIDEFX_CLIENT}"
+          SIDEFX_SECRET: "${SIDEFX_SECRET}"
+          HFS_VER: "${HFS_VER}"
+    command: /bin/bash -c "source /root/setup_hserver.sh && celery --app make_celery worker --loglevel=info --logfile=logs/celery.log -E"
+    volumes:
+      - ./project:/root/hou_webserver
+      - shared_hip_storage:/root/hip_storage
+    env_file:
+      - .env
+    depends_on:
+      - houdini_cp_hbuild
+      - redis
+  
+volumes:
+  shared_hip_storage:

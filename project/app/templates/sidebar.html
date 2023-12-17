@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block sidebar %}
+    <div class="sidebar active">
+        <div class="menu-btn">
+            <i class="icon ph-bold ph-caret-left"></i>
+        </div>
+        <div class="head">
+            <div class="user-img">
+                <img src="{{ url_for('static', filename='images/Houdini3D_icon.png') }}" alt="Profile Picture">
+            </div>
+            <div class="user-details">
+                <p class="title">In Active Development</p>
+                <p class="name">Houdini Previewer</p>
+            </div>
+        </div>
+        <div class="nav">
+            <div class="menu">
+                <p class="title">Main</p>
+                <ul>
+                    <li class="active" id="display-model">
+                        <a href="#">
+                            <i class="icon ph-bold ph-monitor"></i>
+                            <span class="text">Display Model</span>
+                        </a>
+                    </li>
+                    <li id="node-graph">
+                        <a href="#">
+                            <i class="icon ph-bold ph-graph"></i>
+                            <span class="text">Node Graph</span>
+                        </a>
+                    </li>
+                    <li class="hip-upload">
+                        <a href="#">
+                            <i class="icon ph-bold ph-upload-simple"></i>
+                            <span class="text">Upload HIP</span>
+                        </a>
+                    </li>
+                    <form class="uploadForm" method="post" enctype="multipart/form-data">
+                        <div class="status-message"></div>
+                        <div class="wrapped-container">
+                            <div class="upload-field-container">
+                                <input type="file" name="hipfile" class="file-input" style="display:none;" accept=".hip,.hipnc,.hiplc">
+                                <input type="text" class="file-name-display" placeholder="Select a .hip file..." readonly>
+                                <button type="submit" class="upload-button">
+                                    <i class="icon ph-bold ph-upload"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    <li>
+                        <a href="#">
+                            <i class="icon ph-bold ph-archive"></i>
+                            <span class="text">Stored Models</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="menu">
+                <p class="title">Settings</p>
+                <ul>
+                    <li>
+                        <a href="#">
+                            <i class="icon ph-bold ph-gear"></i>
+                            <span class="text">Settings</span>
+                            <i class="arrow ph-bold ph-caret-down"></i>
+                        </a>
+                        <ul class="sub-menu">
+                            <li>
+                                <a href="#">
+                                    <span class="text">Display Settings</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#">
+                                    <span class="text">Preview Render Settings</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div class="menu">
+            <p class="title">Account</p>
+            <ul>
+                <li>
+                    <a href="#">
+                        <i class="icon ph-bold ph-info"></i>
+                        <span class="text">Help</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#">
+                        <i class="icon ph-bold ph-info"></i>
+                        <span class="text">Logout</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+{% endblock %}
+
+{% block content %}
+    <!-- To extend for different views. -->
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='js/sidebar.js') }}" defer></script>
+{% endblock %}

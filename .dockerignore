@@ -1,0 +1,10 @@
+
+
+
+**/logs
+**/.git
+**/.env
+**/.gitignore
+**/venv
+**/util
+project/app/static/**
