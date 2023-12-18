@@ -7,11 +7,9 @@ from config import Config
 
 socketio = SocketIO()
 
-
 def celery_init_app(app):
 
     class FlaskTask(Task):
-
         def __call__(self, *args, **kwargs):
             with app.app_context():
                 return self.run(*args, **kwargs)
@@ -31,6 +29,7 @@ def create_app(config_class=Config):
     app.config.from_prefixed_env()
 
     socketio.init_app(app)
+
     celery_init_app(app)
 
     from app.main import bp as main_bp

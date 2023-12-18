@@ -1,12 +1,62 @@
+import sys
 import math
 import redis
 import argparse
 
 import hou
+from flask import current_app
 
 THUMBNAIL_CAM = "thumbnail_cam1_webrender"
 THUMBNAIL_ROP = "thumbnail_karma1_webrender"
+GLB_ROP = "thumbnail_gltf1_webrender"
 DEFAULT_RES = 512
+
+# Docker automatically resolves this to Redis' internal IP.
+redis_client = redis.Redis(host='redis', port=6379, db=0)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(add_help=False)
+
+    # Option Arguments
+    parser.add_argument('-t',
+                        dest="thumbnail",
+                        action='store_true',
+                        help='Indicate whether to render a thumbnail.')
+    parser.add_argument('-f', '--frames', 
+                        type=parse_tuple, 
+                        help="Specifies the render's frame range as a tuple (start, end, step)")
+
+    # Render path
+    parser.add_argument('file', 
+                        help="Path for the file to render.", 
+                        type=str)
+    parser.add_argument("rop_node",
+                        help="Path for the rop to render.",
+                        type=str)
+    parser.add_argument("render_path",
+                        help="Path for the render output",
+                        type=str)
+
+    args = parser.parse_args()
+    verify_args(args)
+    return args
+
+
+def parse_tuple(value):
+    try:
+        values = value.split(',')
+        if len(values) != 3:
+            raise ValueError
+        return values
+    except ValueError:
+        raise argparse.ArgumentTypeError("A tuple of three integers is required (e.g., 1,100, 1)")
+
+
+def verify_args(args):
+    if not args.thumbnail and not args.frames:
+        print("Please provide frame range when rendering .glb.")
+        sys.exit(1)
 
 
 def render(args):
@@ -15,8 +65,56 @@ def render(args):
         generate_thumbnail(args.rop_node, args.render_path)
         on_completion_thumbnail(args.file, args.rop_node)
     else:
-        render_glb(args.rop_node, args.render_path)
+        result = render_glb(args.rop_node, args.render_path, args.frames)
 
+
+def render_glb(node_path, render_path, frames, hip_path=None):
+    if hip_path:
+        hou.hipFile.load(hip_path)
+
+    render_node = hou.node(node_path)
+    if not render_node:
+        return False
+
+    if render_node.type().category().name() != 'Sop':
+        if not render_node.displayNode():
+            return False
+
+    out_node = hou.node("/out/{0}".format(GLB_ROP))
+    if not out_node:
+        out_node = hou.node("/out").createNode("gltf")
+        out_node.setName(GLB_ROP)
+
+    # Setup the GLTF ROP Node.
+    out_node.parm("trange").set("normal")
+    out_node.parm("usesoppath").set(True)
+    out_node.parm("soppath").set(node_path)
+    out_node.parm('file').set(render_path)
+
+    print("Rendering to: {0}".format(render_path))
+
+    # Directly set, rather than passing `frame_range` in render call
+    # Useful to query "f2" to determine progress in callback.
+    for i in range(3):
+        index_str = str(i + 1)
+        f_parm = out_node.parm("f{0}".format(index_str))
+        f_parm.deleteAllKeyframes()
+        f_parm.set(frames[i])
+
+    out_node.addRenderEventCallback(update_progress)
+    out_node.render()
+    out_node.removeRenderEventCallback(update_progress)
+
+
+def update_progress(rop_node, render_event_type, time):
+    # Update the correct loading bar with "data-node-name" attribute via `nodeName`.
+    if render_event_type == hou.ropRenderEventType.PostFrame:
+        render_node = rop_node.parm("soppath").evalAsNode()
+        endFrame = rop_node.parm("f2").evalAsFloat()
+        progress = (hou.intFrame() / endFrame) * 100.0
+        redis_client.publish(
+            'render_updates',
+            '{0} {1}'.format(render_node.name(), str(progress)))
 
 def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path):
     out_node = hou.node("/out/{0}".format(THUMBNAIL_ROP))
@@ -44,13 +142,15 @@ def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path):
     out_node.render()
 
 
-def generate_thumbnail(node_path, thumbnail_path):
+def generate_thumbnail(node_path, thumbnail_path, hip_path=None):
     """Either need to set up dockerfile with OpenGL or use Karma CPU engine.
 
     Probably want to avoid any GPU requirements right now.
 
     Karma/Mantra seems a bit too slow...
     """
+    if hip_path:
+        hou.hipFile.load(hip_path)
     # Create and position a camera
     out_camera = hou.node("/obj/{0}".format(THUMBNAIL_CAM))
     if not out_camera:
@@ -127,35 +227,11 @@ def frame_selected_bbox(render_obj, camera, sop_geo):
 
 
 def on_completion_thumbnail(node_path, hip_path):
-    # Docker automatically resolves this to Redis' internal IP.
-    redis_client = redis.Redis(host='redis', port=6379, db=0)
     redis_client.publish(
         'render_completion_channel',
         'Render completed for {0}: {1}'.format(hip_path, node_path))
 
-
-def parse_args():
-    parser = argparse.ArgumentParser(add_help=False)
-
-    # Option Arguments
-    parser.add_argument('-t',
-                        dest="thumbnail",
-                        action='store_true',
-                        help='Indicate whether to render a thumbnail.')
-
-    # Render path
-    parser.add_argument('file', help="Path for the file to render.", type=str)
-    parser.add_argument("rop_node",
-                        help="Path for the rop to render.",
-                        type=str)
-    parser.add_argument("render_path",
-                        help="Path for the render output",
-                        type=str)
-
-    args = parser.parse_args()
-    return args
-
-
+# Allow for execution via subprocess via CLI.
 if __name__ == "__main__":
     args = parse_args()
     render(args)

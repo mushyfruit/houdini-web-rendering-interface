@@ -1,0 +1,4 @@
+# Contains the logs output from our celery workers.
+*
+
+!.gitignore

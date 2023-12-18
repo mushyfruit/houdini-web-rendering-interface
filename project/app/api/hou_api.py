@@ -24,20 +24,12 @@ import zipfile
 import threading
 import urllib.parse
 
-from flask import request
-from flask_socketio import join_room
+from flask import current_app
+from app import tasks, socketio
 
-from app import socketio, tasks
-
-GLTF_ROP = "thumbnail_gltf1_webrender"
 ICON_ZIP_PATH = hou.text.expandString("${HFS}/houdini/config/Icons/icons.zip")
 _icon_mapping = {}
 _redis_thread = None
-
-
-@socketio.on('connect')
-def on_connect():
-    pass
 
 
 def scan_and_display_nodes(parent_node, load=True, hip_file=None):
@@ -136,77 +128,51 @@ def locate_and_store_icon(contents,
                 node_dict["parent_icons"][node_name] = svg_xml
 
 
-def submit_node_for_render(node_path, gltf_file, thumbnail_path, frame_tuple):
+def submit_node_for_render(node_path, glb_file, thumbnail_path, frame_tuple):
     global _redis_thread
-    render_node = hou.node(node_path)
-    if not render_node:
-        return False
-
-    if render_node.type().category().name() != 'Sop':
-        if not render_node.displayNode():
-            return False
-
-    out_node = hou.node("/out/{0}".format(GLTF_ROP))
-    if not out_node:
-        out_node = hou.node("/out").createNode("gltf")
-        out_node.setName(GLTF_ROP)
-
-    # Setup the GLTF ROP Node.
-    out_node.parm("trange").set("normal")
-    out_node.parm("usesoppath").set(True)
-    out_node.parm("soppath").set(node_path)
-    out_node.parm('file').set(gltf_file)
-
-    print("Rendering to: {0}".format(gltf_file))
-
-    # Directly set, rather than passing `frame_range` in render call
-    # Useful to query "f2" to determine progress in callback.
-    for i in range(3):
-        index_str = str(i + 1)
-        f_parm = out_node.parm("f{0}".format(index_str))
-        f_parm.deleteAllKeyframes()
-        f_parm.set(frame_tuple[i])
-
-    out_node.addRenderEventCallback(update_progress)
-    out_node.render()
-    out_node.removeRenderEventCallback(update_progress)
-
-    # Spin up a separate instance to submit background thumbnail render.
-    # A bit painful to set up Docker to support GPU rendering with OpenGL.
-    # Hopefully not too bad to just render with CPU via Karma?
-
     if not _redis_thread:
-        thread = threading.Thread(target=listen_to_redis)
+        thread = threading.Thread(target=listen_to_celery_workers)
         thread.start()
 
     hip_path = hou.hipFile.path()
-    print("Firing off task delay...")
-    result = tasks.run_task.delay(hip_path, node_path, thumbnail_path)
+
+    # Run the .glb render background process.
+    tasks.run_render_task.delay(hip_path, node_path, glb_file, frame_tuple)
+
+    # Run the thumbnail background process.
+    tasks.run_thumbnail_task.delay(hip_path, node_path, thumbnail_path)
+
     return True
 
 
-def listen_to_redis():
-    """
+def listen_to_celery_workers():
+    """Create a redis client subscribed to the channels on which
+    the celery workers will publish their updates.
+
+    Render updates received over the `render_updates` channel are
+    then emitted over a WebSocket to update the popper's progress
+    bar.
+
+    Completion notifications received over `render_completion_channel`
+    will indicate to the user that model is being loaded in Babylon.
     """
     redis_client = redis.Redis(host='redis', port=6379, db=0)
     pubsub = redis_client.pubsub()
-    pubsub.subscribe('render_completion_channel')
+    pubsub.subscribe('render_updates', 
+                     'render_completion_channel')
 
     for message in pubsub.listen():
         if message['type'] == 'message':
-            print("Received:", message['data'])
-
-
-def update_progress(rop_node, render_event_type, time):
-    # Update the correct loading bar with "data-node-name" attribute via `nodeName`.
-    if render_event_type == hou.ropRenderEventType.PostFrame:
-        render_node = rop_node.parm("soppath").evalAsNode()
-        endFrame = rop_node.parm("f2").evalAsFloat()
-        progress = (hou.intFrame() / endFrame) * 100.0
-        socketio.emit('progress_update', {
-            'nodeName': render_node.name(),
-            'progress': progress
-        })
+            channel = message['channel'].decode('utf-8')
+            if channel == "render_completion_channel":
+                print("Received:", message['data'])
+            elif channel == "render_updates":
+                progress_string = message['data'].decode('utf-8')
+                render_node_name, progress = progress_string.split(" ")
+                socketio.emit('progress_update', {
+                    'nodeName': render_node_name,
+                    'progress': progress
+                })
 
 
 def load_icon_mappings(zip_file):
