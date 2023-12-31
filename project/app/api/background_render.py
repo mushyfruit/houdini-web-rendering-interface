@@ -1,3 +1,4 @@
+import re
 import sys
 import math
 import redis
@@ -5,6 +6,7 @@ import argparse
 
 import hou
 from flask import current_app
+from app.api.stream import ProgressFilter
 
 THUMBNAIL_CAM = "thumbnail_cam1_webrender"
 THUMBNAIL_ROP = "thumbnail_karma1_webrender"
@@ -23,14 +25,15 @@ def parse_args():
                         dest="thumbnail",
                         action='store_true',
                         help='Indicate whether to render a thumbnail.')
-    parser.add_argument('-f', '--frames', 
-                        type=parse_tuple, 
-                        help="Specifies the render's frame range as a tuple (start, end, step)")
+    parser.add_argument(
+        '-f',
+        '--frames',
+        type=parse_tuple,
+        help="Specifies the render's frame range as a tuple (start, end, step)"
+    )
 
     # Render path
-    parser.add_argument('file', 
-                        help="Path for the file to render.", 
-                        type=str)
+    parser.add_argument('file', help="Path for the file to render.", type=str)
     parser.add_argument("rop_node",
                         help="Path for the rop to render.",
                         type=str)
@@ -50,7 +53,8 @@ def parse_tuple(value):
             raise ValueError
         return values
     except ValueError:
-        raise argparse.ArgumentTypeError("A tuple of three integers is required (e.g., 1,100, 1)")
+        raise argparse.ArgumentTypeError(
+            "A tuple of three integers is required (e.g., 1,100, 1)")
 
 
 def verify_args(args):
@@ -60,17 +64,14 @@ def verify_args(args):
 
 
 def render(args):
-    hou.hipFile.load(args.file)
     if args.thumbnail:
-        generate_thumbnail(args.rop_node, args.render_path)
-        on_completion_thumbnail(args.file, args.rop_node)
+        generate_thumbnail(args.rop_node, args.render_path, args.file)
     else:
-        result = render_glb(args.rop_node, args.render_path, args.frames)
+        render_glb(args.rop_node, args.render_path, args.frames, args.file)
 
 
-def render_glb(node_path, render_path, frames, hip_path=None):
-    if hip_path:
-        hou.hipFile.load(hip_path)
+def render_glb(node_path, render_path, frames, hip_path):
+    hou.hipFile.load(hip_path)
 
     render_node = hou.node(node_path)
     if not render_node:
@@ -104,6 +105,7 @@ def render_glb(node_path, render_path, frames, hip_path=None):
     out_node.addRenderEventCallback(update_progress)
     out_node.render()
     out_node.removeRenderEventCallback(update_progress)
+    on_completion_notification(hip_path, node_path, "glb")
 
 
 def update_progress(rop_node, render_event_type, time):
@@ -113,8 +115,9 @@ def update_progress(rop_node, render_event_type, time):
         endFrame = rop_node.parm("f2").evalAsFloat()
         progress = (hou.intFrame() / endFrame) * 100.0
         redis_client.publish(
-            'render_updates',
-            '{0} {1}'.format(render_node.name(), str(progress)))
+            'render_updates', '{0} {1}'.format(render_node.name(),
+                                               str(progress)))
+
 
 def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path):
     out_node = hou.node("/out/{0}".format(THUMBNAIL_ROP))
@@ -139,18 +142,23 @@ def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path):
     out_node.parm("objects").set(node_path)
     out_node.parm("picture").set(thumbnail_path)
 
-    out_node.render()
+    # output_progress on Karma Node doesn't output ALF_PROGRESS
+    # Have to ensure -a/A flag is passed to husk command:
+    out_node.parm("verbosity").set("a")
+
+    stream_filter = ProgressFilter(redis_client=redis_client)
+    with stream_filter:
+        out_node.render(verbose=True, output_progress=True)
 
 
-def generate_thumbnail(node_path, thumbnail_path, hip_path=None):
+def generate_thumbnail(node_path, thumbnail_path, hip_path):
     """Either need to set up dockerfile with OpenGL or use Karma CPU engine.
 
     Probably want to avoid any GPU requirements right now.
 
     Karma/Mantra seems a bit too slow...
     """
-    if hip_path:
-        hou.hipFile.load(hip_path)
+    hou.hipFile.load(hip_path)
     # Create and position a camera
     out_camera = hou.node("/obj/{0}".format(THUMBNAIL_CAM))
     if not out_camera:
@@ -175,6 +183,7 @@ def generate_thumbnail(node_path, thumbnail_path, hip_path=None):
     # UI is not available, can't use hou.GeometryViewport.frameSelected() :(
     frame_selected_bbox(render_obj, out_camera, sop_geo)
     render_thumbnail_with_karma(node_path, out_camera.path(), thumbnail_path)
+    on_completion_notification(hip_path, node_path, "thumb")
 
 
 def frame_selected_bbox(render_obj, camera, sop_geo):
@@ -226,10 +235,10 @@ def frame_selected_bbox(render_obj, camera, sop_geo):
     camera.setWorldTransform(result)
 
 
-def on_completion_thumbnail(node_path, hip_path):
-    redis_client.publish(
-        'render_completion_channel',
-        'Render completed for {0}: {1}'.format(hip_path, node_path))
+def on_completion_notification(node_path, hip_path, render_type):
+    redis_client.publish('render_completion_channel',
+                         ' '.join([hip_path, node_path, render_type]))
+
 
 # Allow for execution via subprocess via CLI.
 if __name__ == "__main__":

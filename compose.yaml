@@ -32,7 +32,7 @@ services:
           SIDEFX_CLIENT: "${SIDEFX_CLIENT}"
           SIDEFX_SECRET: "${SIDEFX_SECRET}"
           HFS_VER: "${HFS_VER}"
-    command: /bin/bash -c "source /root/setup_hserver.sh && celery --app make_celery worker --loglevel=info --logfile=logs/celery.log -E"
+    command: /bin/bash -c "source /root/setup_hserver.sh && celery --app make_celery worker --loglevel=info --logfile=logs/celery.log -E -c 2"
     volumes:
       - ./project:/root/hou_webserver
       - shared_hip_storage:/root/hip_storage

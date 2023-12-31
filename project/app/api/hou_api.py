@@ -15,6 +15,7 @@ def enableHouModule():
         if hasattr(sys, "setdlopenflags"):
             sys.setdlopenflags(old_dlopen_flags)
 
+
 enableHouModule()
 import hou
 
@@ -158,7 +159,7 @@ def listen_to_celery_workers():
     """
     redis_client = redis.Redis(host='redis', port=6379, db=0)
     pubsub = redis_client.pubsub()
-    pubsub.subscribe('render_updates', 
+    pubsub.subscribe('render_updates', 'thumb_updates',
                      'render_completion_channel')
 
     for message in pubsub.listen():
@@ -173,6 +174,9 @@ def listen_to_celery_workers():
                     'nodeName': render_node_name,
                     'progress': progress
                 })
+            elif channel == "thumb_updates":
+                progress_percentage = float(message['data'].decode('utf-8'))
+                print(progress_percentage)
 
 
 def load_icon_mappings(zip_file):
