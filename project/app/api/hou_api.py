@@ -20,13 +20,12 @@ enableHouModule()
 import hou
 
 import os
-import redis
 import zipfile
 import threading
 import urllib.parse
 
-from flask import current_app
-from app import tasks, socketio
+from app import tasks
+from app.api import socket_update
 
 ICON_ZIP_PATH = hou.text.expandString("${HFS}/houdini/config/Icons/icons.zip")
 _icon_mapping = {}
@@ -129,54 +128,27 @@ def locate_and_store_icon(contents,
                 node_dict["parent_icons"][node_name] = svg_xml
 
 
-def submit_node_for_render(node_path, glb_file, thumbnail_path, frame_tuple):
+def submit_node_for_render(render_struct):
+    """
+    """
     global _redis_thread
     if not _redis_thread:
-        thread = threading.Thread(target=listen_to_celery_workers)
-        thread.start()
+        _redis_thread = threading.Thread(
+            target=socket_update.listen_to_celery_workers)
+        _redis_thread.start()
 
     hip_path = hou.hipFile.path()
 
+    # Celery automatically serializes arguments via JSON.
+    # Ensure we first convert the RenderStruct to dictionary.
+
     # Run the .glb render background process.
-    tasks.run_render_task.delay(hip_path, node_path, glb_file, frame_tuple)
+    tasks.run_render_task.delay(render_struct._asdict(), hip_path)
 
     # Run the thumbnail background process.
-    tasks.run_thumbnail_task.delay(hip_path, node_path, thumbnail_path)
+    tasks.run_thumbnail_task.delay(render_struct._asdict(), hip_path)
 
     return True
-
-
-def listen_to_celery_workers():
-    """Create a redis client subscribed to the channels on which
-    the celery workers will publish their updates.
-
-    Render updates received over the `render_updates` channel are
-    then emitted over a WebSocket to update the popper's progress
-    bar.
-
-    Completion notifications received over `render_completion_channel`
-    will indicate to the user that model is being loaded in Babylon.
-    """
-    redis_client = redis.Redis(host='redis', port=6379, db=0)
-    pubsub = redis_client.pubsub()
-    pubsub.subscribe('render_updates', 'thumb_updates',
-                     'render_completion_channel')
-
-    for message in pubsub.listen():
-        if message['type'] == 'message':
-            channel = message['channel'].decode('utf-8')
-            if channel == "render_completion_channel":
-                print("Received:", message['data'])
-            elif channel == "render_updates":
-                progress_string = message['data'].decode('utf-8')
-                render_node_name, progress = progress_string.split(" ")
-                socketio.emit('progress_update', {
-                    'nodeName': render_node_name,
-                    'progress': progress
-                })
-            elif channel == "thumb_updates":
-                progress_percentage = float(message['data'].decode('utf-8'))
-                print(progress_percentage)
 
 
 def load_icon_mappings(zip_file):

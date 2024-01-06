@@ -123,33 +123,6 @@ def handle_upload():
         return jsonify({"message": "File type not allowed"}), 400
 
 
-@bp.route("/node_render", methods=['GET'])
-def submit_node_path_for_render():
-    node_path = request.args.get('path')
-
-    start = int(request.args.get('start'))
-    end = int(request.args.get('end'))
-    step = int(request.args.get('step'))
-    frame_tuple = (start, end, step)
-
-    if node_path:
-        filename, gltf_file, thumbnail = generate_uuid_filepath("glb")
-        result = hou_api.submit_node_for_render(node_path, gltf_file,
-                                                thumbnail, frame_tuple)
-        if result:
-            session.setdefault('rendered_filenames', {})[filename] = gltf_file
-            # Ensure the nested dict is maintained in session obj.
-            session.modified = True
-            return jsonify({
-                "message": "File render successful.",
-                "filename": filename
-            }), 200
-        else:
-            return jsonify({"message": "Node render failed."}), 400
-    else:
-        return jsonify({"message": "Invalid submission node."}), 400
-
-
 def allowed_hip(filename):
     _, ext = os.path.splitext(filename)
     return ext.lower() in current_app.config["ALLOWED_EXTENSIONS"]

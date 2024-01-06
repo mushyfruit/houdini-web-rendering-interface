@@ -50,7 +50,7 @@ class nodeManager {
 
 const nodeGraphManager = new nodeManager();
 
-function initNodeGraph(file_uuid, default_context="/obj") {
+function initNodeGraph(file_uuid, default_context = "/obj") {
     // Delete any lingering poppers from last session.
     deletePoppers();
 
@@ -69,25 +69,25 @@ function initNodeGraph(file_uuid, default_context="/obj") {
                 'font-size': '8',
                 'text-halign': 'right',
                 'text-margin-x': 2,
-                'background-image': function(ele) {
+                'background-image': function (ele) {
                     return ele.data('icon');
                 },
-                'background-color': function(ele) {
+                'background-color': function (ele) {
                     return ele.data('color');
                 },
                 'background-width': 6,
                 'background-height': 6,
                 'background-fit': 'none',
-                },
             },
-            {
-                selector: 'edge',
-                style: {
-                    'target-arrow-shape': 'triangle',
-                    'curve-style': 'bezier',
-                    'width': '1',
-                }
+        },
+        {
+            selector: 'edge',
+            style: {
+                'target-arrow-shape': 'triangle',
+                'curve-style': 'bezier',
+                'width': '1',
             }
+        }
         ],
         layout: {
             name: 'dagre'
@@ -99,7 +99,7 @@ function initNodeGraph(file_uuid, default_context="/obj") {
         appState.defaultStart = node_data.start
         appState.defaultEnd = node_data.end
         if (!appState.sessionId && node_data.session_id) {
-            appState.sessionId = node_data.session_id 
+            appState.sessionId = node_data.session_id
         }
 
         cy.add(node_data.elements);
@@ -148,7 +148,7 @@ function setupDblClick(cy) {
 function setupPoppers(cy, nodeTypeCategory) {
     cy.on("click", "node", (event) => {
         const node = event.target
-        
+
         if (appState.activeNode && appState.activeNode !== node) {
             removePopper(appState.activeNode);
         }
@@ -182,7 +182,7 @@ function deletePoppers() {
         if (popperElement && popperElement.parentNode) {
             popperElement.parentNode.removeChild(popperElement);
         }
-    
+
         delete poppers[popperId];
     }
 }
@@ -193,8 +193,8 @@ function createPopperForNode(cy, node) {
         poppers[popperId].setOptions(options => ({
             ...options,
             modifiers: [
-               ...options.modifiers,
-               { name: 'eventListeners', enabled: true }
+                ...options.modifiers,
+                { name: 'eventListeners', enabled: true }
             ]
         }));
         poppers[popperId].update();
@@ -227,10 +227,10 @@ function removePopper(node) {
         poppers[popperId].setOptions(options => ({
             ...options,
             modifiers: [
-               ...options.modifiers,
-               { name: 'eventListeners', enabled: false }
+                ...options.modifiers,
+                { name: 'eventListeners', enabled: false }
             ]
-          }));
+        }));
     }
     const popperElement = document.getElementById(popperId);
     if (popperElement) {
@@ -242,7 +242,7 @@ function removePopper(node) {
 function generateContextButtons(cy, full_context, parent_icons) {
     const contexts = full_context.split('/');
     const filteredContexts = contexts.filter(context => context !== '');
-    
+
     // Clear on context refresh.
     const container = document.getElementById('button-container');
     if (container.children.length > 0) {
@@ -278,7 +278,7 @@ function generateContextButtons(cy, full_context, parent_icons) {
 
         }
 
-        button.addEventListener('click', function(event) {
+        button.addEventListener('click', function (event) {
             const fullPath = event.target.getAttribute('nodeFullPath');
             updateGraph(undefined, fullPath).then(node_data => {
                 cy.elements().remove();
@@ -345,25 +345,25 @@ function buildPopperDiv(node) {
 
     div.setAttribute('data-show', 'true');
     const nodeStatusValue = div.querySelector("#node-last-cooked");
-    nodeStatusValue.textContent  = nodeLastCooked || "Uncooked";
+    nodeStatusValue.textContent = nodeLastCooked || "Uncooked";
 
     // Allow for CSS to pickup on transition.
     setTimeout(() => {
         div.setAttribute('data-show', 'true');
     }, 20);
-    
+
     const button = div.querySelector('#submitRender');
-    button.addEventListener('click', function() {
+    button.addEventListener('click', function () {
         handleSubmit(node);
     });
 
     return div;
 }
 
-function initSocket() {
+function initSocket(node) {
     if (!appState.socket) {
         appState.socket = io();
-        appState.socket.on('progress_update', function(data) {
+        appState.socket.on('progress_update', function (data) {
             let nodeName = data.nodeName;
             let progress = data.progress;
             let bar = document.querySelector(`#cooking-bar[data-node-name="${nodeName}"]`);
@@ -374,8 +374,7 @@ function initSocket() {
     }
 }
 
-function handleSubmit(node) {
-    initSocket();
+function startRenderTask(node) {
     const startFrameInput = document.getElementById('start-frame');
     const endFrameInput = document.getElementById('end-frame');
     const stepFrameInput = document.getElementById('step-frame');
@@ -384,27 +383,74 @@ function handleSubmit(node) {
     const end = parseInt(endFrameInput.value, 10);
     const step = parseInt(stepFrameInput.value, 10);
 
-    // Additional logical validation
+    // Validate render settings here:
+    if (!validateSubmission(start, end, step)) {
+        return;
+    }
+
+    const nodePath = node.data('path');
+
+    // Emit the render task event.
+    appState.socket.timeout(5000).emit(
+        'submit_render_task',
+        { 'start': start, 'end': end, 'step': step, 'path': nodePath },
+        (err, response) => {
+            if (err) {
+                console.error("Server didn't acknowledge render event.");
+            } else {
+                render_status = response.success
+                if (!render_status) {
+                    // TODO Display to user that submission failed.
+                    console.error(response.message);
+                    return;
+                }
+
+                rendered_filename = response.filename
+                if (rendered_filename) {
+                    nodeGraphManager.addRender(nodePath, rendered_filename);
+                    handlePostRender(nodePath, rendered_filename);
+                } else {
+                    // TODO Display to user that submission failed.
+                    console.error("No filename for rendered .glb file returned.")
+                }
+                console.log(response.message);
+            }
+        }
+    )
+}
+
+
+function validateSubmission(start, end, step) {
     if (start >= end) {
         console.error("Start frame must be less than end frame.");
-        return;
+        return false;
     }
 
     if (step <= 0) {
         console.error("Step must be greater than 0.");
-        return;
+        return false;
     }
 
-    const frameTuple = [start, end, step];
-    const nodePath = node.data('path');
+    if (!appState.socket) {
+        console.error("WebSocket has not been initialized!");
+        return false;
+    }
 
-    submitForRender(nodePath, frameTuple).then(node_result => {
-        rendered_filename = node_result.filename
-        nodeGraphManager.addRender(nodePath, rendered_filename);
-        handlePostRender(nodePath, rendered_filename);
-    }).catch(error => {
-        console.error("Error processing node render: ", error);
-    })
+    return true;
+}
+
+
+function handleSubmit(node) {
+    initSocket();
+    startRenderTask(node);
+
+    // submitForRender(nodePath, frameTuple).then(node_result => {
+    //     rendered_filename = node_result.filename
+    //     nodeGraphManager.addRender(nodePath, rendered_filename);
+    //     handlePostRender(nodePath, rendered_filename);
+    // }).catch(error => {
+    //     console.error("Error processing node render: ", error);
+    // })
 }
 
 function getCurrentFormattedTime() {
@@ -415,7 +461,7 @@ function getCurrentFormattedTime() {
     const amPm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
     hours = hours ? hours : 12;
-    
+
     return `${hours}:${minutes}:${seconds} ${amPm}`;
 }
 
@@ -429,31 +475,10 @@ function handlePostRender(nodePath) {
     }
 }
 
-async function submitForRender(nodePath, frameTuple) {
-    try {
-        const [start, end, step] = frameTuple;
-        const response = await fetch(`/node_render?path=${
-            encodeURIComponent(nodePath)}&start=${
-                encodeURIComponent(start)}&end=${
-                    encodeURIComponent(end)}&step=${
-                        encodeURIComponent(step)}&sessionId=${
-                            encodeURIComponent(appState.sessionId)}`);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return await response.json();
-    } catch (error) {
-        console.error("Error rendering the selected node.", error);
-    }
-}
-
-
 async function updateGraph(file_uuid, node_name) {
     try {
         file_uuid = file_uuid || globalFileUuid;
-        
+
         if (!file_uuid) {
             throw new Error("Please pass a .hip UUID.")
         }

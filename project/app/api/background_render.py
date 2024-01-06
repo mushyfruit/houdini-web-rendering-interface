@@ -6,15 +6,13 @@ import argparse
 
 import hou
 from flask import current_app
-from app.api.stream import ProgressFilter
+
+from app.api import redis_client, progress_filter
 
 THUMBNAIL_CAM = "thumbnail_cam1_webrender"
 THUMBNAIL_ROP = "thumbnail_karma1_webrender"
 GLB_ROP = "thumbnail_gltf1_webrender"
 DEFAULT_RES = 512
-
-# Docker automatically resolves this to Redis' internal IP.
-redis_client = redis.Redis(host='redis', port=6379, db=0)
 
 
 def parse_args():
@@ -70,10 +68,10 @@ def render(args):
         render_glb(args.rop_node, args.render_path, args.frames, args.file)
 
 
-def render_glb(node_path, render_path, frames, hip_path):
+def render_glb(render_data, hip_path):
     hou.hipFile.load(hip_path)
 
-    render_node = hou.node(node_path)
+    render_node = hou.node(render_data["node_path"])
     if not render_node:
         return False
 
@@ -89,13 +87,14 @@ def render_glb(node_path, render_path, frames, hip_path):
     # Setup the GLTF ROP Node.
     out_node.parm("trange").set("normal")
     out_node.parm("usesoppath").set(True)
-    out_node.parm("soppath").set(node_path)
-    out_node.parm('file').set(render_path)
+    out_node.parm("soppath").set(render_data["node_path"])
+    out_node.parm('file').set(render_data["node_path"])
 
-    print("Rendering to: {0}".format(render_path))
+    print("Rendering to: {0}".format(render_data["glb_path"]))
 
     # Directly set, rather than passing `frame_range` in render call
     # Useful to query "f2" to determine progress in callback.
+    frames = (render_data["start"], render_data["end"], render_data["step"])
     for i in range(3):
         index_str = str(i + 1)
         f_parm = out_node.parm("f{0}".format(index_str))
@@ -105,16 +104,17 @@ def render_glb(node_path, render_path, frames, hip_path):
     out_node.addRenderEventCallback(update_progress)
     out_node.render()
     out_node.removeRenderEventCallback(update_progress)
-    on_completion_notification(hip_path, node_path, "glb")
+    on_completion_notification(hip_path, render_data["glb_path"], "glb")
 
 
 def update_progress(rop_node, render_event_type, time):
     # Update the correct loading bar with "data-node-name" attribute via `nodeName`.
     if render_event_type == hou.ropRenderEventType.PostFrame:
+        redis_instance = redis_client.get_client_instance()
         render_node = rop_node.parm("soppath").evalAsNode()
         endFrame = rop_node.parm("f2").evalAsFloat()
         progress = (hou.intFrame() / endFrame) * 100.0
-        redis_client.publish(
+        redis_instance.publish(
             'render_updates', '{0} {1}'.format(render_node.name(),
                                                str(progress)))
 
@@ -146,12 +146,13 @@ def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path):
     # Have to ensure -a/A flag is passed to husk command:
     out_node.parm("verbosity").set("a")
 
-    stream_filter = ProgressFilter(redis_client=redis_client)
+    redis_instance = redis_client.get_client_instance()
+    stream_filter = progress_filter.ProgressFilter(redis_client=redis_instance)
     with stream_filter:
         out_node.render(verbose=True, output_progress=True)
 
 
-def generate_thumbnail(node_path, thumbnail_path, hip_path):
+def generate_thumbnail(render_data, hip_path):
     """Either need to set up dockerfile with OpenGL or use Karma CPU engine.
 
     Probably want to avoid any GPU requirements right now.
@@ -170,7 +171,7 @@ def generate_thumbnail(node_path, thumbnail_path, hip_path):
         # Adjust focal length so everything doesn't look dorky.
         out_camera.parm("focal").set(200)
 
-    render_obj = hou.node(node_path)
+    render_obj = hou.node(render_data["node_path"])
 
     # Need a SOP node to calculate the OBJ's bbox.
     if render_obj.type().category().name() == 'Sop':
@@ -182,8 +183,9 @@ def generate_thumbnail(node_path, thumbnail_path, hip_path):
 
     # UI is not available, can't use hou.GeometryViewport.frameSelected() :(
     frame_selected_bbox(render_obj, out_camera, sop_geo)
-    render_thumbnail_with_karma(node_path, out_camera.path(), thumbnail_path)
-    on_completion_notification(hip_path, node_path, "thumb")
+    render_thumbnail_with_karma(render_data["node_path"], out_camera.path(),
+                                render_data["thumbnail_name"])
+    on_completion_notification(hip_path, render_data["node_path"], "thumb")
 
 
 def frame_selected_bbox(render_obj, camera, sop_geo):
@@ -236,8 +238,9 @@ def frame_selected_bbox(render_obj, camera, sop_geo):
 
 
 def on_completion_notification(node_path, hip_path, render_type):
-    redis_client.publish('render_completion_channel',
-                         ' '.join([hip_path, node_path, render_type]))
+    redis_instance = redis_client.get_client_instance()
+    redis_instance.publish('render_completion_channel',
+                           ' '.join([hip_path, node_path, render_type]))
 
 
 # Allow for execution via subprocess via CLI.
