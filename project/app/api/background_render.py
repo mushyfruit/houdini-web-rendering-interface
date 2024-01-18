@@ -1,18 +1,14 @@
 import re
 import sys
 import math
-import redis
+import json
+import logging
 import argparse
 
 import hou
 from flask import current_app
 
-from app.api import redis_client, progress_filter
-
-THUMBNAIL_CAM = "thumbnail_cam1_webrender"
-THUMBNAIL_ROP = "thumbnail_karma1_webrender"
-GLB_ROP = "thumbnail_gltf1_webrender"
-DEFAULT_RES = 512
+from app.api import redis_client, progress_filter, constants as cnst
 
 
 def parse_args():
@@ -70,6 +66,8 @@ def render(args):
 
 def render_glb(render_data, hip_path):
     hou.hipFile.load(hip_path)
+    logging.debug("Received render request for GLB: {0}".format(
+        str(render_data)))
 
     render_node = hou.node(render_data["node_path"])
     if not render_node:
@@ -79,10 +77,10 @@ def render_glb(render_data, hip_path):
         if not render_node.displayNode():
             return False
 
-    out_node = hou.node("/out/{0}".format(GLB_ROP))
-    if not out_node:
+    out_node = hou.node("/out/{0}".format(cnst.GLB_ROP))
+    if out_node is None:
         out_node = hou.node("/out").createNode("gltf")
-        out_node.setName(GLB_ROP)
+        out_node.setName(cnst.GLB_ROP)
 
     # Setup the GLTF ROP Node.
     out_node.parm("trange").set("normal")
@@ -90,7 +88,8 @@ def render_glb(render_data, hip_path):
     out_node.parm("soppath").set(render_data["node_path"])
     out_node.parm('file').set(render_data["node_path"])
 
-    print("Rendering to: {0}".format(render_data["glb_path"]))
+    glb_path = render_data["glb_path"]
+    logging.info("Rendering to: {0}".format(glb_path))
 
     # Directly set, rather than passing `frame_range` in render call
     # Useful to query "f2" to determine progress in callback.
@@ -101,32 +100,51 @@ def render_glb(render_data, hip_path):
         f_parm.deleteAllKeyframes()
         f_parm.set(frames[i])
 
+    # Store the redis socket ID for retrieval in callback.
+    out_node.setCachedUserData("socket_id", render_data["socket_id"])
+
     out_node.addRenderEventCallback(update_progress)
-    out_node.render()
-    out_node.removeRenderEventCallback(update_progress)
-    on_completion_notification(hip_path, render_data["glb_path"], "glb")
+
+    try:
+        out_node.render()
+    except hou.OperationFailed as exc:
+        logging.error(exc)
+    finally:
+        out_node.removeRenderEventCallback(update_progress)
+
+    on_completion_notification(out_node.path(),
+                               cnst.BackgroundRenderType.glb_file)
 
 
 def update_progress(rop_node, render_event_type, time):
     # Update the correct loading bar with "data-node-name" attribute via `nodeName`.
     if render_event_type == hou.ropRenderEventType.PostFrame:
-        redis_instance = redis_client.get_client_instance()
         render_node = rop_node.parm("soppath").evalAsNode()
-        endFrame = rop_node.parm("f2").evalAsFloat()
-        progress = (hou.intFrame() / endFrame) * 100.0
-        redis_instance.publish(
-            'render_updates', '{0} {1}'.format(render_node.name(),
-                                               str(progress)))
+        end_frame = rop_node.parm("f2").evalAsFloat()
+        progress = (hou.intFrame() / end_frame) * 100.0
+
+        socket_id = rop_node.cachedUserData("socket_id")
+        if socket_id is not None:
+            render_update_data = {
+                "render_node_name": render_node.name(),
+                "socket_id": socket_id,
+                "progress": progress
+            }
+            render_update_json = json.dumps(render_update_data)
+            redis_instance = redis_client.get_client_instance()
+            redis_instance.publish(cnst.PublishChannels.glb_progress,
+                                   render_update_json)
 
 
-def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path):
-    out_node = hou.node("/out/{0}".format(THUMBNAIL_ROP))
+def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path,
+                                socket_id):
+    out_node = hou.node("/out/{0}".format(cnst.THUMBNAIL_ROP))
     if not out_node:
         out_node = hou.node("/out").createNode("karma")
-        out_node.setName(THUMBNAIL_ROP)
+        out_node.setName(cnst.THUMBNAIL_ROP)
 
-        out_node.parm("resolutionx").set(DEFAULT_RES)
-        out_node.parm("resolutiony").set(DEFAULT_RES)
+        out_node.parm("resolutionx").set(cnst.DEFAULT_RES)
+        out_node.parm("resolutiony").set(cnst.DEFAULT_RES)
 
         out_node.parm("camera").set(camera_path)
         out_node.parm("samplesperpixel").set(6)
@@ -147,7 +165,9 @@ def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path):
     out_node.parm("verbosity").set("a")
 
     redis_instance = redis_client.get_client_instance()
-    stream_filter = progress_filter.ProgressFilter(redis_client=redis_instance)
+    stream_filter = progress_filter.ProgressFilter(redis_client=redis_instance,
+                                                   socket_id=socket_id,
+                                                   node_name=out_node.name())
     with stream_filter:
         out_node.render(verbose=True, output_progress=True)
 
@@ -161,12 +181,12 @@ def generate_thumbnail(render_data, hip_path):
     """
     hou.hipFile.load(hip_path)
     # Create and position a camera
-    out_camera = hou.node("/obj/{0}".format(THUMBNAIL_CAM))
+    out_camera = hou.node("/obj/{0}".format(cnst.THUMBNAIL_CAM))
     if not out_camera:
         out_camera = hou.node("/obj").createNode("cam")
-        out_camera.setName(THUMBNAIL_CAM)
-        out_camera.parm("resx").set(DEFAULT_RES)
-        out_camera.parm("resy").set(DEFAULT_RES)
+        out_camera.setName(cnst.THUMBNAIL_CAM)
+        out_camera.parm("resx").set(cnst.DEFAULT_RES)
+        out_camera.parm("resy").set(cnst.DEFAULT_RES)
 
         # Adjust focal length so everything doesn't look dorky.
         out_camera.parm("focal").set(200)
@@ -183,9 +203,16 @@ def generate_thumbnail(render_data, hip_path):
 
     # UI is not available, can't use hou.GeometryViewport.frameSelected() :(
     frame_selected_bbox(render_obj, out_camera, sop_geo)
-    render_thumbnail_with_karma(render_data["node_path"], out_camera.path(),
-                                render_data["thumbnail_name"])
-    on_completion_notification(hip_path, render_data["node_path"], "thumb")
+
+    node_path = render_data["node_path"]
+    thumbnail_name = render_data["thumbnail_name"]
+    socket_id = render_data["socket_id"]
+
+    render_thumbnail_with_karma(node_path, out_camera.path(), thumbnail_name,
+                                socket_id)
+    on_completion_notification(node_path,
+                               cnst.BackgroundRenderType.thumbnail,
+                               socket_id=socket_id)
 
 
 def frame_selected_bbox(render_obj, camera, sop_geo):
@@ -199,7 +226,6 @@ def frame_selected_bbox(render_obj, camera, sop_geo):
     transform = hou.hmath.buildTranslate(adjust_height)
     camera.setWorldTransform(transform)
 
-    # Hacky AF
     look_at_cube = hou.node("/obj").createNode("geo")
     look_at_cube.setWorldTransform(hou.hmath.buildTranslate(bbox_center))
     look_at_mtx = camera.buildLookatRotation(look_at_cube)
@@ -237,10 +263,29 @@ def frame_selected_bbox(render_obj, camera, sop_geo):
     camera.setWorldTransform(result)
 
 
-def on_completion_notification(node_path, hip_path, render_type):
+def on_completion_notification(node_path, render_type, socket_id=None):
+    if socket_id is None:
+        completed_render_node = hou.node(node_path)
+        if completed_render_node is None:
+            logging.error("Unable to trigger notification "
+                          "on node: {0}".format(" ".join(
+                              [node_path, render_type])))
+            return None
+        socket_id = completed_render_node.cachedUserData("socket_id")
+        completed_render_node.destroyCachedUserData("socket_id")
+
+    render_completion_data = {
+        "render_node_path": node_path,
+        "render_type": render_type,
+        "socket_id": socket_id
+    }
+
+    render_update_json = json.dumps(render_completion_data)
+    logging.info("Render Completion Published: {0}".format(render_update_json))
+
     redis_instance = redis_client.get_client_instance()
-    redis_instance.publish('render_completion_channel',
-                           ' '.join([hip_path, node_path, render_type]))
+    redis_instance.publish(cnst.PublishChannels.render_completion,
+                           render_update_json)
 
 
 # Allow for execution via subprocess via CLI.

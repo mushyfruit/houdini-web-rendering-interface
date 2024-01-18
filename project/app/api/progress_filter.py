@@ -1,8 +1,12 @@
 import os
 import re
 import sys
+import json
 import time
+import logging
 import threading
+
+from app.api import constants as cnst
 
 
 class ProgressFilter():
@@ -17,9 +21,15 @@ class ProgressFilter():
 
     _escape_char = "\b"
 
-    def __init__(self, stream=None, redis_client=None):
+    def __init__(self,
+                 stream=None,
+                 redis_client=None,
+                 socket_id=None,
+                 node_name=None):
         self._orig_stream = stream
         self._redis_client = redis_client
+        self._socket_id = socket_id
+        self._node_name = node_name
         self._regex = re.compile(r'ALF_PROGRESS (\d+)%')
         if not self._orig_stream:
             self._orig_stream = sys.__stdout__
@@ -84,7 +94,21 @@ class ProgressFilter():
                 os.write(self._stream_fd, line.encode("utf-8"))
 
     def update_redis_client(self, match_obj):
-        self._redis_client.publish('thumb_updates', match_obj.group(1))
+        try:
+            progress = match_obj.group(1)
+            if not progress.isdigit():
+                raise ValueError("Invalid progress data")
+
+            json_data = {"progress": match_obj.group(1)}
+            if self._socket_id:
+                json_data["socket_id"] = self._socket_id
+            if self._node_name:
+                json_data["node_name"] = self._node_name
+
+            self._redis_client.publish(cnst.PublishChannels.thumb_progress,
+                                       json.dumps(json_data))
+        except Exception as e:
+            logging.error("Error in update_redis_client: {0}".format(e))
 
     def convert_message(self, match_obj):
         new_string = match_obj.group(1)

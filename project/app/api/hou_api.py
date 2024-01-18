@@ -25,9 +25,8 @@ import threading
 import urllib.parse
 
 from app import tasks
-from app.api import socket_update
+from app.api import socket_update, constants as cnst
 
-ICON_ZIP_PATH = hou.text.expandString("${HFS}/houdini/config/Icons/icons.zip")
 _icon_mapping = {}
 _redis_thread = None
 
@@ -52,7 +51,8 @@ def process_hip_for_node_structure(root_node):
         "parent_icons": {}
     }
 
-    with zipfile.ZipFile(ICON_ZIP_PATH) as zip_file:
+    icon_zip_path = hou.text.expandString(cnst.ICON_ZIP_PATH)
+    with zipfile.ZipFile(icon_zip_path) as zip_file:
         contents = zip_file.namelist()
 
         # Store the parent icon for use in the top context bar.

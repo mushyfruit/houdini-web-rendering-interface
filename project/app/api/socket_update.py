@@ -1,11 +1,13 @@
 import os
+import json
 import uuid
+import logging
 from collections import namedtuple
 
 from flask import request, current_app, session, jsonify
 
 from app import socketio
-from app.api import redis_client, hou_api
+from app.api import redis_client, hou_api, constants as cnst
 
 
 class RenderTaskStruct(
@@ -77,20 +79,65 @@ def listen_to_celery_workers():
                      'render_completion_channel')
 
     for message in pubsub.listen():
-        if message['type'] == 'message':
-            channel = message['channel'].decode('utf-8')
-            if channel == "render_completion_channel":
-                print("Received:", message['data'])
-            elif channel == "render_updates":
-                progress_string = message['data'].decode('utf-8')
-                render_node_name, progress = progress_string.split(" ")
+        if message['type'] != 'message':
+            continue
+
+        channel = message['channel'].decode('utf-8')
+        message_data = message['data'].decode('utf-8')
+
+        socket_id_missing = False
+        if not message_data:
+            logging.error("No message data provided for update.")
+            return
+
+        if channel == cnst.PublishChannels.render_completion:
+            render_completion_data = json.loads(message_data)
+            render_type = render_completion_data["render_type"]
+            if render_type == cnst.BackgroundRenderType.glb_file:
+                render_node_path = render_completion_data["render_node_path"]
+                socketio.emit('glb_render_finished',
+                              {'nodePath': render_node_path},
+                              room=socket_id)
+            elif render_type == cnst.BackgroundRenderType.thumbnail:
+                logging.error("TEST")
+                pass
+
+        elif channel == cnst.PublishChannels.glb_progress:
+            render_data = json.loads(message_data)
+
+            render_node_name = render_data['render_node_name']
+            progress = render_data['progress']
+
+            socket_id = render_data.get('socket_id')
+            logging.info("{} socket id".format(socket_id))
+            if socket_id is not None:
                 socketio.emit('progress_update', {
                     'nodeName': render_node_name,
                     'progress': progress
-                })
-            elif channel == "thumb_updates":
-                progress_percentage = float(message['data'].decode('utf-8'))
-                print(progress_percentage)
+                },
+                              room=socket_id)
+            else:
+                socket_id_missing = True
+
+        elif channel == cnst.PublishChannels.thumb_progress:
+            thumb_data = json.loads(message_data)
+
+            progress_percentage = float(thumb_data["progress"])
+            socket_id = thumb_data.get("socket_id")
+            thumb_node_name = thumb_data.get("node_name")
+
+            if socket_id is not None:
+                socketio.emit('thumb_update', {
+                    'nodeName': thumb_node_name,
+                    'progress': progress_percentage
+                },
+                              room=socket_id)
+            else:
+                socket_id_missing = True
+
+        if socket_id_missing:
+            logging.debug("No Socket ID was provided when"
+                          "attempting update for: {0}".format(channel))
 
 
 def generate_uuid_filepath(suffix):
