@@ -21,11 +21,7 @@ class ProgressFilter():
 
     _escape_char = "\b"
 
-    def __init__(self,
-                 stream=None,
-                 redis_client=None,
-                 socket_id=None,
-                 node_name=None):
+    def __init__(self, redis_client, socket_id, node_name, stream=None):
         self._orig_stream = stream
         self._redis_client = redis_client
         self._socket_id = socket_id
@@ -39,6 +35,7 @@ class ProgressFilter():
 
         self._stream_fd = None
         self._worker_thread = None
+        self.debug_mode = False
 
     def __enter__(self):
         self.start()
@@ -86,7 +83,7 @@ class ProgressFilter():
 
             match_obj = self._regex.search(line)
             if match_obj is not None:
-                if self._redis_client:
+                if self._redis_client and not self.debug_mode:
                     self.update_redis_client(match_obj)
                 else:
                     os.write(self._stream_fd, self.convert_message(match_obj))
@@ -99,11 +96,11 @@ class ProgressFilter():
             if not progress.isdigit():
                 raise ValueError("Invalid progress data")
 
-            json_data = {"progress": match_obj.group(1)}
-            if self._socket_id:
-                json_data["socket_id"] = self._socket_id
-            if self._node_name:
-                json_data["node_name"] = self._node_name
+            json_data = {
+                "progress": match_obj.group(1),
+                "socket_id": self._socket_id,
+                "node_name": self._node_name
+            }
 
             self._redis_client.publish(cnst.PublishChannels.thumb_progress,
                                        json.dumps(json_data))

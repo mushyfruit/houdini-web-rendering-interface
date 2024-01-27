@@ -363,15 +363,57 @@ function buildPopperDiv(node) {
 function initSocket(node) {
     if (!appState.socket) {
         appState.socket = io();
-        appState.socket.on('progress_update', function (data) {
-            let nodeName = data.nodeName;
-            let progress = data.progress;
-            let bar = document.querySelector(`#cooking-bar[data-node-name="${nodeName}"]`);
-            if (bar) {
-                bar.style.width = progress + '%';
-            }
-        })
+        registerEventListeners();
     }
+}
+
+function registerEventListeners() {
+    appState.socket.on('node_render_progress_channel', handleRenderUpdate);
+    appState.socket.on('node_thumb_progress_channel', handleThumbUpdate);
+    appState.socket.on('node_thumb_finish_channel', handleThumbFinish);
+    appState.socket.on('node_render_finish_channel', handleRenderFinish);
+}
+
+function handleRenderUpdate(data) {
+    let nodeName = data.nodeName;
+    let progress = data.progress;
+    let bar = document.querySelector(`#cooking-bar[data-node-name="${nodeName}"]`);
+    if (bar) {
+        bar.style.width = progress + '%';
+    }
+}
+
+function handleThumbUpdate(data) {
+    // Pass data to the rendered "page"
+    // Just pass the data there.
+    // Update underlying data structure?
+    console.log("THUMB")
+    console.log(data);
+}
+
+function handleThumbFinish(data) {
+    console.log("THUMB FINISH")
+    console.log(data);
+}
+
+function handleRenderFinish(data) {
+    rendered_glb = data.filename;
+    if (!rendered_glb) {
+        console.error("No valid render filepath was provided.");
+        return;
+    }
+
+    nodePath = data.nodepath;
+    if (!nodePath) {
+        console.error("No valid render filepath was provided.");
+        return;
+    }
+
+    console.log("Received valid render finished data.")
+    console.log(rendered_glb)
+    console.log(nodePath)
+    nodeGraphManager.addRender(nodePath, rendered_glb);
+    handlePostRender(nodePath, rendered_glb);
 }
 
 function startRenderTask(node) {
@@ -396,6 +438,7 @@ function startRenderTask(node) {
         { 'start': start, 'end': end, 'step': step, 'path': nodePath },
         (err, response) => {
             if (err) {
+                // Server doesn't acknowledge event within timeout.
                 console.error("Server didn't acknowledge render event.");
             } else {
                 render_status = response.success
@@ -405,14 +448,7 @@ function startRenderTask(node) {
                     return;
                 }
 
-                rendered_filename = response.filename
-                if (rendered_filename) {
-                    nodeGraphManager.addRender(nodePath, rendered_filename);
-                    handlePostRender(nodePath, rendered_filename);
-                } else {
-                    // TODO Display to user that submission failed.
-                    console.error("No filename for rendered .glb file returned.")
-                }
+                // TODO Display successful submission
                 console.log(response.message);
             }
         }
@@ -443,14 +479,6 @@ function validateSubmission(start, end, step) {
 function handleSubmit(node) {
     initSocket();
     startRenderTask(node);
-
-    // submitForRender(nodePath, frameTuple).then(node_result => {
-    //     rendered_filename = node_result.filename
-    //     nodeGraphManager.addRender(nodePath, rendered_filename);
-    //     handlePostRender(nodePath, rendered_filename);
-    // }).catch(error => {
-    //     console.error("Error processing node render: ", error);
-    // })
 }
 
 function getCurrentFormattedTime() {

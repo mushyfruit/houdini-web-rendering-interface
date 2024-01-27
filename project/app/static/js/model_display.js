@@ -27,18 +27,31 @@ function stopRenderLoop() {
 }
 
 function startRenderLoop() {
-    engine.runRenderLoop(function() {
+    engine.runRenderLoop(function () {
         scene.render();
-    }); 
+    });
 }
 
 // Handle loading and clearing models.
 function loadModel(fileName) {
     clearModels();
-    BABYLON.SceneLoader.Append("/static/temp/", fileName, scene, function () {
-        console.log("GLB Loaded Successfully!");
-        scene.beginAnimation(scene, 0, 100, true);
-    });
+    BABYLON.SceneLoader.Append("/static/temp/", fileName, scene,
+        function () {
+            console.log("GLB Loaded Successfully!");
+            scene.beginAnimation(scene, 0, 100, true);
+        },
+
+        function (evt) {
+            console.log(evt);
+        },
+
+        function (scene, message, exception) {
+            console.log("Error while loading GLB:", message);
+            console.error(exception);
+        }
+
+
+    );
 }
 
 function clearModels() {

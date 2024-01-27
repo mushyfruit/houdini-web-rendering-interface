@@ -1,4 +1,3 @@
-import re
 import sys
 import math
 import json
@@ -6,7 +5,6 @@ import logging
 import argparse
 
 import hou
-from flask import current_app
 
 from app.api import redis_client, progress_filter, constants as cnst
 
@@ -65,11 +63,19 @@ def render(args):
 
 
 def render_glb(render_data, hip_path):
-    hou.hipFile.load(hip_path)
-    logging.debug("Received render request for GLB: {0}".format(
+    try:
+        hou.hipFile.load(hip_path)
+    except hou.LoadWarning as e:
+        logging.error(e.instanceMessage())
+        return None
+
+    node_path = render_data["node_path"]
+    glb_path = render_data["glb_path"]
+
+    logging.info("Received render request for GLB: {0}".format(
         str(render_data)))
 
-    render_node = hou.node(render_data["node_path"])
+    render_node = hou.node(node_path)
     if not render_node:
         return False
 
@@ -85,11 +91,10 @@ def render_glb(render_data, hip_path):
     # Setup the GLTF ROP Node.
     out_node.parm("trange").set("normal")
     out_node.parm("usesoppath").set(True)
-    out_node.parm("soppath").set(render_data["node_path"])
-    out_node.parm('file').set(render_data["node_path"])
+    out_node.parm("soppath").set(node_path)
 
-    glb_path = render_data["glb_path"]
     logging.info("Rendering to: {0}".format(glb_path))
+    out_node.parm('file').set(glb_path)
 
     # Directly set, rather than passing `frame_range` in render call
     # Useful to query "f2" to determine progress in callback.
@@ -102,18 +107,20 @@ def render_glb(render_data, hip_path):
 
     # Store the redis socket ID for retrieval in callback.
     out_node.setCachedUserData("socket_id", render_data["socket_id"])
-
     out_node.addRenderEventCallback(update_progress)
 
     try:
         out_node.render()
     except hou.OperationFailed as exc:
         logging.error(exc)
+    else:
+        on_completion_notification(node_path,
+                                   glb_path,
+                                   cnst.BackgroundRenderType.glb_file,
+                                   socket_id=render_data["socket_id"])
     finally:
         out_node.removeRenderEventCallback(update_progress)
-
-    on_completion_notification(out_node.path(),
-                               cnst.BackgroundRenderType.glb_file)
+        out_node.destroyCachedUserData("socket_id", must_exist=False)
 
 
 def update_progress(rop_node, render_event_type, time):
@@ -165,19 +172,16 @@ def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path,
     out_node.parm("verbosity").set("a")
 
     redis_instance = redis_client.get_client_instance()
-    stream_filter = progress_filter.ProgressFilter(redis_client=redis_instance,
-                                                   socket_id=socket_id,
-                                                   node_name=out_node.name())
+    stream_filter = progress_filter.ProgressFilter(redis_instance, socket_id,
+                                                   out_node.name())
     with stream_filter:
         out_node.render(verbose=True, output_progress=True)
 
 
 def generate_thumbnail(render_data, hip_path):
-    """Either need to set up dockerfile with OpenGL or use Karma CPU engine.
+    """OpenGL isn't available with current Docker setup (no GPU).
 
-    Probably want to avoid any GPU requirements right now.
-
-    Karma/Mantra seems a bit too slow...
+    Instead, render via Karma CPU in separate celery Task.
     """
     hou.hipFile.load(hip_path)
     # Create and position a camera
@@ -205,12 +209,13 @@ def generate_thumbnail(render_data, hip_path):
     frame_selected_bbox(render_obj, out_camera, sop_geo)
 
     node_path = render_data["node_path"]
-    thumbnail_name = render_data["thumbnail_name"]
+    thumbnail_path = render_data["thumbnail_path"]
     socket_id = render_data["socket_id"]
 
-    render_thumbnail_with_karma(node_path, out_camera.path(), thumbnail_name,
+    render_thumbnail_with_karma(node_path, out_camera.path(), thumbnail_path,
                                 socket_id)
     on_completion_notification(node_path,
+                               thumbnail_path,
                                cnst.BackgroundRenderType.thumbnail,
                                socket_id=socket_id)
 
@@ -263,7 +268,10 @@ def frame_selected_bbox(render_obj, camera, sop_geo):
     camera.setWorldTransform(result)
 
 
-def on_completion_notification(node_path, render_type, socket_id=None):
+def on_completion_notification(node_path,
+                               render_path,
+                               render_type,
+                               socket_id=None):
     if socket_id is None:
         completed_render_node = hou.node(node_path)
         if completed_render_node is None:
@@ -272,9 +280,9 @@ def on_completion_notification(node_path, render_type, socket_id=None):
                               [node_path, render_type])))
             return None
         socket_id = completed_render_node.cachedUserData("socket_id")
-        completed_render_node.destroyCachedUserData("socket_id")
 
     render_completion_data = {
+        "render_file_path": render_path,
         "render_node_path": node_path,
         "render_type": render_type,
         "socket_id": socket_id

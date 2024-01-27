@@ -18,27 +18,27 @@ def index():
     return render_template('index.html')
 
 
-def generate_uuid_filepath(suffix):
-    output_dir = os.path.join(current_app.static_folder, 'temp')
-    filename = "{0}.{1}".format(uuid.uuid4(), suffix)
-    thumbnail = "{0}.{1}".format(uuid.uuid4(), "png")
-    return filename, os.path.join(output_dir, filename), thumbnail
-
-
 @bp.route("/static/temp/<filename>", methods=['GET'])
-def gltf_view(filename):
+def get_glb_file(filename):
+    if not filename.endswith(".glb"):
+        render_id = filename
+        filename = render_id + ".glb"
+
     # Separate logic for placeholder model.
     if filename == current_app.config['PLACEHOLDER_FILE']:
         placeholder_dir = os.path.join(current_app.static_folder,
                                        current_app.config['PLACEHOLDER_DIR'])
-        gltf_file_path = os.path.join(placeholder_dir, filename)
-    elif filename not in session["rendered_filenames"]:
-        return jsonify({"File wasn't rendered."}), 400
+        glb_file_path = os.path.join(placeholder_dir, filename)
     else:
-        gltf_file_path = session["rendered_filenames"][filename]
+        glb_file_path = os.path.join(current_app.static_folder, 'temp',
+                                     filename)
 
     # Send the GLTF file as a response
-    return send_file(gltf_file_path,
+    if not os.path.exists(glb_file_path):
+        print("{0} does not exist on disk.".format(glb_file_path))
+        return jsonify({"error": "Requested an invalid .glb file."}), 400
+
+    return send_file(glb_file_path,
                      mimetype='application/gltf+json',
                      as_attachment=True,
                      download_name='model.gltf',

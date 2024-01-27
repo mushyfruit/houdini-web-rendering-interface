@@ -2,23 +2,19 @@ import os
 import json
 import uuid
 import logging
-from collections import namedtuple
 
-from flask import request, current_app, session, jsonify
+from flask import request, current_app, session
 
 from app import socketio
 from app.api import redis_client, hou_api, constants as cnst
 
-
-class RenderTaskStruct(
-        namedtuple(
-            "RenderTaskStruct",
-            "node_path glb_path thumbnail_name start end step socket_id")):
-    """Immutable data struct defining necessary fields to perform the
-    render task.
-
-    """
-    __slots__ = ()
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+file_handler = logging.FileHandler('celery_listener.log')
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
 
 
 @socketio.on('connect')
@@ -34,30 +30,37 @@ def receive_render_task(render_data):
     step = render_data.get('step')
     node_path = render_data.get('path')
 
-    if not node_path:
-        return {"message": "Invalid submission node.", "success": False}
+    try:
+        if not node_path:
+            raise ValueError("Invalid submission node provided.")
 
-    filename, glb_path, thumbnail_name = generate_uuid_filepath("glb")
-    render_struct = RenderTaskStruct(node_path=node_path,
-                                     glb_path=glb_path,
-                                     thumbnail_name=thumbnail_name,
-                                     start=start,
-                                     end=end,
-                                     step=step,
-                                     socket_id=socket_id)
-    result = hou_api.submit_node_for_render(render_struct)
+        render_id, glb_path, thumbnail_path = generate_uuid_filepath("glb")
+        if render_id is None:
+            raise ValueError("Unable to construct a valid UUID for render.")
 
-    if not result:
-        return {"message": "Render submission failed.", "success": False}
+        render_struct = cnst.RenderTaskStruct(node_path=node_path,
+                                              glb_path=glb_path,
+                                              thumbnail_path=thumbnail_path,
+                                              start=start,
+                                              end=end,
+                                              step=step,
+                                              socket_id=socket_id)
+        logger.info(render_struct)
+        result = hou_api.submit_node_for_render(render_struct)
+        if not result:
+            raise RuntimeError("Render submission failed.")
+    except Exception as e:
+        error_message = str(e)
+        return {"message": error_message, "success": False}
 
-    session.setdefault('rendered_filenames', {})[filename] = glb_path
+    session.setdefault('rendered_filenames', {})[render_id] = glb_path
     # Ensure the nested dict is maintained in session obj.
     session.modified = True
 
     # SocketIO will handle the serialization to JSON.
     return {
         "message": "Submission succeeded.",
-        "filename": filename,
+        "filename": str(render_id),
         "success": True
     }
 
@@ -75,8 +78,15 @@ def listen_to_celery_workers():
     """
     _redis_client = redis_client.get_client_instance()
     pubsub = _redis_client.pubsub()
-    pubsub.subscribe('render_updates', 'thumb_updates',
-                     'render_completion_channel')
+    pubsub.subscribe(cnst.PublishChannels.render_completion,
+                     cnst.PublishChannels.glb_progress,
+                     cnst.PublishChannels.thumb_progress)
+
+    channel_handlers = {
+        cnst.PublishChannels.render_completion: handle_render_completion,
+        cnst.PublishChannels.glb_progress: handle_glb_progress_update,
+        cnst.PublishChannels.thumb_progress: handle_thumb_progress_update,
+    }
 
     for message in pubsub.listen():
         if message['type'] != 'message':
@@ -85,63 +95,90 @@ def listen_to_celery_workers():
         channel = message['channel'].decode('utf-8')
         message_data = message['data'].decode('utf-8')
 
-        socket_id_missing = False
         if not message_data:
-            logging.error("No message data provided for update.")
+            logger.error("No message data provided "
+                         "for update: {0}".format(channel))
             return
 
-        if channel == cnst.PublishChannels.render_completion:
-            render_completion_data = json.loads(message_data)
-            render_type = render_completion_data["render_type"]
-            if render_type == cnst.BackgroundRenderType.glb_file:
-                render_node_path = render_completion_data["render_node_path"]
-                socketio.emit('glb_render_finished',
-                              {'nodePath': render_node_path},
-                              room=socket_id)
-            elif render_type == cnst.BackgroundRenderType.thumbnail:
-                logging.error("TEST")
-                pass
-
-        elif channel == cnst.PublishChannels.glb_progress:
-            render_data = json.loads(message_data)
-
-            render_node_name = render_data['render_node_name']
-            progress = render_data['progress']
-
-            socket_id = render_data.get('socket_id')
-            logging.info("{} socket id".format(socket_id))
-            if socket_id is not None:
-                socketio.emit('progress_update', {
-                    'nodeName': render_node_name,
-                    'progress': progress
-                },
-                              room=socket_id)
-            else:
-                socket_id_missing = True
-
-        elif channel == cnst.PublishChannels.thumb_progress:
-            thumb_data = json.loads(message_data)
-
-            progress_percentage = float(thumb_data["progress"])
-            socket_id = thumb_data.get("socket_id")
-            thumb_node_name = thumb_data.get("node_name")
-
-            if socket_id is not None:
-                socketio.emit('thumb_update', {
-                    'nodeName': thumb_node_name,
-                    'progress': progress_percentage
-                },
-                              room=socket_id)
-            else:
-                socket_id_missing = True
-
-        if socket_id_missing:
-            logging.debug("No Socket ID was provided when"
-                          "attempting update for: {0}".format(channel))
+        if channel in channel_handlers:
+            channel_handlers[channel](message_data)
+        else:
+            logger.error("Invalid channel name: {0}".format(channel))
 
 
-def generate_uuid_filepath(suffix):
+def handle_render_completion(message_data):
+    render_completion_data = json.loads(message_data)
+
+    required_keys = {
+        'render_type', 'render_node_path', 'render_file_path', 'socket_id'
+    }
+    if not validate_required_keys(render_completion_data, required_keys):
+        return
+
+    render_type = render_completion_data["render_type"]
+    if render_type == cnst.BackgroundRenderType.glb_file:
+        channel = cnst.PublishChannels.node_render_finished
+    elif render_type == cnst.BackgroundRenderType.thumbnail:
+        channel = cnst.PublishChannels.node_thumb_finished
+    else:
+        logger.error("Unknown render type: {0}".format(render_type))
+
+    filename = render_completion_data["render_file_path"].split(os.sep)[-1]
+
+    socketio.emit(channel, {
+        'filename': filename,
+        'nodepath': render_completion_data["render_node_path"]
+    },
+                  room=render_completion_data["socket_id"])
+
+
+def handle_glb_progress_update(message_data):
+    glb_progress_data = json.loads(message_data)
+
+    required_keys = {'render_node_name', 'progress', "socket_id"}
+    if not validate_required_keys(glb_progress_data, required_keys):
+        return
+
+    socketio.emit(cnst.PublishChannels.node_render_update, {
+        'nodeName': glb_progress_data['render_node_name'],
+        'progress': glb_progress_data['progress']
+    },
+                  room=glb_progress_data["socket_id"])
+
+
+def handle_thumb_progress_update(message_data):
+    thumb_data = json.loads(message_data)
+
+    required_keys = {'node_name', 'progress', "socket_id"}
+    if not validate_required_keys(thumb_data, required_keys):
+        return
+
+    socketio.emit(cnst.PublishChannels.node_thumb_update, {
+        'nodeName': thumb_data["node_name"],
+        'progress': float(thumb_data["progress"])
+    },
+                  room=thumb_data["socket_id"])
+
+
+def validate_required_keys(data, keys):
+    if not keys.issubset(data):
+        logger.error("Missing required data in message: {0}".format(str(keys)))
+        return False
+    return True
+
+
+def generate_uuid_filepath(glb_suffix):
+    if glb_suffix not in ["glb", "gltf"]:
+        logger.error("Invalid suffix provided: {0}".format(glb_suffix))
+        return None, None, None
+
     output_dir = os.path.join(current_app.static_folder, 'temp')
-    filename = "{0}.{1}".format(uuid.uuid4(), suffix)
-    thumbnail = "{0}.{1}".format(uuid.uuid4(), "png")
-    return filename, os.path.join(output_dir, filename), thumbnail
+
+    render_id = uuid.uuid4()
+    render_name = "{0}.{1}".format(render_id, glb_suffix)
+    thumbnail_name = "{0}.{1}".format(render_id, cnst.THUMBNAIL_EXT)
+
+    render_path = os.path.join(output_dir, render_name)
+    thumbnail_path = os.path.join(output_dir, thumbnail_name)
+
+    return render_id, render_path, thumbnail_path

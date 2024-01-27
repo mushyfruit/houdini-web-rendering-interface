@@ -146,7 +146,7 @@ def submit_node_for_render(render_struct):
     tasks.run_render_task.delay(render_struct._asdict(), hip_path)
 
     # Run the thumbnail background process.
-    tasks.run_thumbnail_task.delay(render_struct._asdict(), hip_path)
+    #tasks.run_thumbnail_task.delay(render_struct._asdict(), hip_path)
 
     return True
 
