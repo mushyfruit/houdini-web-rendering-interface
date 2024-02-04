@@ -2,9 +2,9 @@ import os
 import redis
 
 
-class RedisClient():
+class RedisClient:
     """Singleton implementation of the redis client to ensure we
-    avoid creating unecessary connections.
+    avoid creating unnecessary connections.
 
     """
 

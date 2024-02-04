@@ -1,5 +1,6 @@
-def enableHouModule():
-    import sys, os
+def enable_hou_module():
+    import os
+    import sys
     if hasattr(sys, "setdlopenflags"):
         old_dlopen_flags = sys.getdlopenflags()
         sys.setdlopenflags(old_dlopen_flags | os.RTLD_GLOBAL)
@@ -16,7 +17,7 @@ def enableHouModule():
             sys.setdlopenflags(old_dlopen_flags)
 
 
-enableHouModule()
+enable_hou_module()
 import hou
 
 import os
@@ -146,7 +147,7 @@ def submit_node_for_render(render_struct):
     tasks.run_render_task.delay(render_struct._asdict(), hip_path)
 
     # Run the thumbnail background process.
-    #tasks.run_thumbnail_task.delay(render_struct._asdict(), hip_path)
+    tasks.run_thumbnail_task.delay(render_struct._asdict(), hip_path)
 
     return True
 

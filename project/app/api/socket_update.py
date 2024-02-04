@@ -1,25 +1,12 @@
 import os
 import json
 import uuid
-import logging
-
 from flask import request, current_app, session
 
 from app import socketio
-from app.api import redis_client, hou_api, constants as cnst
+from app.api import redis_client, hou_api, utils, constants as cnst
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-file_handler = logging.FileHandler('celery_listener.log')
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-
-
-@socketio.on('connect')
-def connect():
-    sid = request.sid
+logger = utils.get_logger("celery_listener")
 
 
 @socketio.on('submit_render_task')
@@ -122,6 +109,7 @@ def handle_render_completion(message_data):
         channel = cnst.PublishChannels.node_thumb_finished
     else:
         logger.error("Unknown render type: {0}".format(render_type))
+        return
 
     filename = render_completion_data["render_file_path"].split(os.sep)[-1]
 

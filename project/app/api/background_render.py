@@ -9,59 +9,6 @@ import hou
 from app.api import redis_client, progress_filter, constants as cnst
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(add_help=False)
-
-    # Option Arguments
-    parser.add_argument('-t',
-                        dest="thumbnail",
-                        action='store_true',
-                        help='Indicate whether to render a thumbnail.')
-    parser.add_argument(
-        '-f',
-        '--frames',
-        type=parse_tuple,
-        help="Specifies the render's frame range as a tuple (start, end, step)"
-    )
-
-    # Render path
-    parser.add_argument('file', help="Path for the file to render.", type=str)
-    parser.add_argument("rop_node",
-                        help="Path for the rop to render.",
-                        type=str)
-    parser.add_argument("render_path",
-                        help="Path for the render output",
-                        type=str)
-
-    args = parser.parse_args()
-    verify_args(args)
-    return args
-
-
-def parse_tuple(value):
-    try:
-        values = value.split(',')
-        if len(values) != 3:
-            raise ValueError
-        return values
-    except ValueError:
-        raise argparse.ArgumentTypeError(
-            "A tuple of three integers is required (e.g., 1,100, 1)")
-
-
-def verify_args(args):
-    if not args.thumbnail and not args.frames:
-        print("Please provide frame range when rendering .glb.")
-        sys.exit(1)
-
-
-def render(args):
-    if args.thumbnail:
-        generate_thumbnail(args.rop_node, args.render_path, args.file)
-    else:
-        render_glb(args.rop_node, args.render_path, args.frames, args.file)
-
-
 def render_glb(render_data, hip_path):
     try:
         hou.hipFile.load(hip_path)
@@ -88,7 +35,7 @@ def render_glb(render_data, hip_path):
         out_node = hou.node("/out").createNode("gltf")
         out_node.setName(cnst.GLB_ROP)
 
-    # Setup the GLTF ROP Node.
+    # Set up the GLTF ROP Node.
     out_node.parm("trange").set("normal")
     out_node.parm("usesoppath").set(True)
     out_node.parm("soppath").set(node_path)
@@ -294,9 +241,3 @@ def on_completion_notification(node_path,
     redis_instance = redis_client.get_client_instance()
     redis_instance.publish(cnst.PublishChannels.render_completion,
                            render_update_json)
-
-
-# Allow for execution via subprocess via CLI.
-if __name__ == "__main__":
-    args = parse_args()
-    render(args)

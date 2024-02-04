@@ -9,7 +9,7 @@ import threading
 from app.api import constants as cnst
 
 
-class ProgressFilter():
+class ProgressFilter:
     """Redirects the ALF_PROGRESS updates to a redis client to update the 
     front end's render progress.
 
@@ -86,7 +86,7 @@ class ProgressFilter():
                 if self._redis_client and not self.debug_mode:
                     self.update_redis_client(match_obj)
                 else:
-                    os.write(self._stream_fd, self.convert_message(match_obj))
+                    os.write(self._stream_fd, convert_message(match_obj))
             else:
                 os.write(self._stream_fd, line.encode("utf-8"))
 
@@ -107,7 +107,8 @@ class ProgressFilter():
         except Exception as e:
             logging.error("Error in update_redis_client: {0}".format(e))
 
-    def convert_message(self, match_obj):
-        new_string = match_obj.group(1)
-        update_string = "Update {0}".format(new_string)
-        return update_string.encode("utf-8")
+
+def convert_message(match_obj):
+    new_string = match_obj.group(1)
+    update_string = "Update {0}".format(new_string)
+    return update_string.encode("utf-8")

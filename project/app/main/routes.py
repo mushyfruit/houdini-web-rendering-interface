@@ -4,8 +4,8 @@ import uuid
 
 from app.main import bp
 from app.api import hou_api
-from flask import (current_app, flash, render_template, send_file, jsonify,
-                   request, session)
+from flask import (current_app, render_template,
+                   send_file, jsonify, request, session)
 from werkzeug.utils import secure_filename
 
 
@@ -91,7 +91,7 @@ def get_node_graph():
     return render_template('node_graph.html'), 200
 
 
-# hwebserver.registerWSGIApp doesn't support multi-part form requests.
+# hwebserver.registerWSGIApp doesn't support multipart form requests.
 # Avoid using that as backend.
 @bp.route("/hip_upload", methods=['POST'])
 def handle_upload():
