@@ -2,6 +2,11 @@
   "name": "houdini-webapp",
   "version": "1.0.0",
   "description": "Houdini Web-Rendering App.",
+  "scripts": {
+    "build": "webpack --mode production --progress --config webpack.config.js",
+    "dev-build": "webpack --progress --mode development --config webpack.config.js",
+    "watch": "webpack --progress --mode development --config webpack.config.js --watch"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mushyfruit/houdini-web-rendering-interface.git"
@@ -15,5 +20,9 @@
   "bugs": {
     "url": "https://github.com/mushyfruit/houdini-web-rendering-interface/issues"
   },
-  "homepage": "https://github.com/mushyfruit/houdini-web-rendering-interface#readme"
+  "homepage": "https://github.com/mushyfruit/houdini-web-rendering-interface#readme",
+  "devDependencies": {
+    "webpack": "^5.90.1",
+    "webpack-cli": "^5.1.4"
+  }
 }

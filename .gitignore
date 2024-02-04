@@ -10,7 +10,14 @@ hou_download/
 instance/
 .webassets-cache
 
+# Webpack
+*.bundle.js
+
+# NPM
+node_modules/
+
 # Environments
+.idea/
 .env
 .venv
 .idea/
