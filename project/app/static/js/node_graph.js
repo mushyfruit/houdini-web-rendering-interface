@@ -5,10 +5,21 @@ const appState = {
     socket: null,
     defaultStart: null,
     defaultEnd: null,
+    defaultStep: 1,
     sessionId: null
 }
 
-class nodeManager {
+class NodeState {
+    constructor() {
+        this.lastCooked = null;
+        this.thumbnail = null;
+        this.has_cooked = false;
+        this.startFrame = null;
+        this.endFrame = null;
+        this.stepFrame = null;
+    }
+}
+class NodeManager {
     constructor() {
         this.renders = new Map();
         this.latestFilename = null;
@@ -16,6 +27,10 @@ class nodeManager {
         // Track the context and file UUID
         this.latestFileUUID = null;
         this.latestFileContext = null;
+
+        // Cache mapping node_path to node states.
+        // Poppers are ephemeral, so store the relevant data fields here.
+        this.nodeStateCache = new Map();
     }
 
     addRender(nodePath, renderedFilename) {
@@ -25,10 +40,34 @@ class nodeManager {
 
     setFileUUID(fileUUID) {
         this.latestFileUUID = fileUUID;
+        if (this.poppersCache) {
+            this.poppersCache.clear();
+        }
     }
 
     updateContext(nodeContext) {
         this.latestFileContext = nodeContext;
+    }
+
+    updateNodeStateCache(nodePath, key, value) {
+        let nodeState;
+
+        if (this.nodeStateCache.has(nodePath)) {
+            nodeState = this.nodeStateCache.get(nodePath);
+        } else {
+            nodeState = new NodeState();
+        }
+
+        if (key in nodeState) {
+                nodeState[key] = value;
+                this.nodeStateCache.set(nodePath, nodeState);
+            } else {
+                console.error(`Invalid node state update for ${key} : ${value}`);
+        }
+    }
+
+    getNodeStateCache(nodePath) {
+        return this.nodeStateCache.get(nodePath);
     }
 
     getRender(nodePath) {
@@ -48,7 +87,7 @@ class nodeManager {
     }
 }
 
-const nodeGraphManager = new nodeManager();
+const nodeGraphManager = new NodeManager();
 
 function initNodeGraph(file_uuid, default_context = "/obj") {
     // Delete any lingering poppers from last session.
@@ -122,7 +161,7 @@ function setupDblClick(cy) {
             return;
         }
 
-        const node_name = node.data().path
+        const node_name = node.data("path");
         updateGraph(undefined, node_name).then(node_data => {
             cy.elements().remove();
 
@@ -298,18 +337,23 @@ function generateContextButtons(cy, full_context, parent_icons) {
 
 function buildPopperDiv(node) {
     // Loader bar is located between geo1 and cook status.
-    nodeName = node.data('id');
     nodeContext = node.data('path');
-    nodeTypeCategory = node.data('category')
-    nodeLastCooked = node.data('cooktime')
+    nodeCache = nodeGraphManager.getNodeStateCache(nodeContext);
+
+    nodeName = node.data('id');
+    nodeLastCooked = nodeCache?.lastCooked ?? node.data('cooktime');
+
+    nodeStartFrame = nodeCache?.startFrame ?? appState.defaultStart;
+    nodeEndFrame = nodeCache?.endFrame ?? appState.defaultEnd;
+    nodeStepFrame = nodeCache?.stepFrame ?? appState.defaultStep;
+
     const html = `
         <div class="card">
             <div class="card-body">
                 <div id="node-context-container">
                     <div id="node-context">
-                        <p id="popper-node-context">${nodeContext}</p>
                         <p id="popper-node-name">${nodeName}</p>
-                        <p id="popper-node-operator">${nodeTypeCategory}</p>
+                        <p id="popper-node-context">${nodeContext}</p>
                     </div>
                 </div>
                 <div id="node-cook-bar-container">
@@ -327,11 +371,11 @@ function buildPopperDiv(node) {
                 </div>
                 <div id="frame-input-container">
                     <label for="start-frame">Start/End/Inc</label>
-                    <input type="number" id="start-frame" name="startFrame" min="1" class="frame-input" value="${appState.defaultStart}">
+                    <input type="number" id="start-frame" name="startFrame" min="1" class="frame-input" value="${nodeStartFrame}">
 
-                    <input type="number" id="end-frame" name="endFrame" min="2" class="frame-input" value="${appState.defaultEnd}">
+                    <input type="number" id="end-frame" name="endFrame" min="2" class="frame-input" value="${nodeEndFrame}">
 
-                    <input type="number" id="step-frame" name="stepFrame" min="1" class="frame-input" value="1">
+                    <input type="number" id="step-frame" name="stepFrame" min="1" class="frame-input" value="${nodeStepFrame}">
                 </div>
                 <div id="render-button-container">
                     <button id="submitRender" class="render-btn">Submit</button>
@@ -356,6 +400,22 @@ function buildPopperDiv(node) {
     button.addEventListener('click', function () {
         handleSubmit(node);
     });
+
+    const frameInputs = document.querySelectorAll('.frame-input');
+    frameInputs.forEach(input => {
+        input.addEventListener('input', function(e) {
+            const value = e.target.value;
+            const frameInputName = e.target.name;
+            nodeGraphManager.updateNodeStateCache(
+                nodeContext, frameInputName, value
+            );
+        })
+    })
+
+    if (nodeCache?.has_cooked ?? false) {
+        let bar = div.querySelector('#cooking-bar');
+        bar.style.width = '100%';
+    }
 
     return div;
 }
@@ -392,28 +452,14 @@ function handleThumbUpdate(data) {
 }
 
 function handleThumbFinish(data) {
-    console.log("THUMB FINISH")
-    console.log(data);
+    nodeGraphManager.updateNodeStateCache(nodePath, "thumbnail", data.filename);
 }
 
 function handleRenderFinish(data) {
-    rendered_glb = data.filename;
-    if (!rendered_glb) {
-        console.error("No valid render filepath was provided.");
-        return;
-    }
-
     nodePath = data.nodepath;
-    if (!nodePath) {
-        console.error("No valid render filepath was provided.");
-        return;
-    }
-
-    console.log("Received valid render finished data.")
-    console.log(rendered_glb)
-    console.log(nodePath)
-    nodeGraphManager.addRender(nodePath, rendered_glb);
-    handlePostRender(nodePath, rendered_glb);
+    nodeGraphManager.addRender(nodePath, data.filename);
+    nodeGraphManager.updateNodeStateCache(nodePath, "has_cooked", true);
+    handlePostRender(nodePath);
 }
 
 function startRenderTask(node) {
@@ -499,18 +545,21 @@ function handlePostRender(nodePath) {
     let nodeName = segments[segments.length - 1];
     const last_cooked = document.querySelector(`.node-status-value[data-node-name="${nodeName}"]`);
     if (last_cooked) {
-        last_cooked.textContent = getCurrentFormattedTime();
+        const cook_time = getCurrentFormattedTime();
+        nodeGraphManager.updateNodeStateCache(nodePath, "lastCooked", cook_time)
+        last_cooked.textContent = cook_time;
     }
 }
 
-async function updateGraph(file_uuid, node_name) {
+async function updateGraph(file_uuid = globalFileUuid, node_name) {
+    if (!file_uuid) {
+        throw new Error("Please pass a .hip UUID.");
+    }
+    if (!node_name) {
+        throw new Error("Node name is required.");
+    }
+
     try {
-        file_uuid = file_uuid || globalFileUuid;
-
-        if (!file_uuid) {
-            throw new Error("Please pass a .hip UUID.")
-        }
-
         globalFileUuid = file_uuid;
 
         const response = await fetch(`/node_data?uuid=${file_uuid}&name=${node_name}`);

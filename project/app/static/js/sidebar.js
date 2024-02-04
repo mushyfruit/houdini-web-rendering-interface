@@ -5,26 +5,28 @@ document.addEventListener('DOMContentLoaded', (event) => {
     connectHIP();
 });
 
-function connectHIP() {
+async function connectHIP() {
     const uploadForm = document.querySelector('.uploadForm')
-    uploadForm.addEventListener('submit', function(e) {
+    uploadForm.addEventListener('submit', async function (e) {
         e.preventDefault();
-
         let formData = new FormData(this);
-        let xhr = new XMLHttpRequest();
-        xhr.open('POST', '/hip_upload', true);
 
-        xhr.onload = function() {
-            if (this.status == 200) {
-                const response = JSON.parse(this.responseText);
-                nodeGraphManager.setFileUUID(response.uuid);
-                fetch_node_graph(response.uuid);
-            } else {
-                document.querySelector('.status-message').innerText = "Upload failed...";
+        try {
+            const response = await fetch('hip_upload', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                throw new Error('Upload failed...');
             }
-        };
 
-        xhr.send(formData);
+            const data = await response.json();
+            nodeGraphManager.setFileUUID(data.uuid);
+            await fetch_node_graph(data.uuid);
+        } catch (error) {
+            document.querySelector('.status-message').innerText = error.message;
+        }
     })
 }
 
@@ -46,20 +48,20 @@ function showRenderCanvas() {
     }
 }
 
-function fetch_node_graph(file_uuid, default_context="/obj") {
-    let xhr = new XMLHttpRequest();
-    xhr.open('GET', '/node_graph', true);
-    xhr.onload = function() {
-        if (this.status == 200) {
-            // Replace the main body content with the fetched HTML
-            hideRenderCanvas();
-            document.querySelector('.main-body').innerHTML = this.response;
-            initNodeGraph(file_uuid, default_context);
-        } else {
-            document.querySelector('.status-message').innerText = "Failed to load new content...";
+async function fetch_node_graph(file_uuid, default_context="/obj") {
+    try {
+        const response = await fetch('node_graph');
+        if (!response.ok) {
+            throw new Error('Failed to load the node graph...');
         }
-    };
-    xhr.send();
+
+        const htmlContent = await response.text();
+        hideRenderCanvas();
+        document.querySelector('.main-body').innerHTML = htmlContent;
+        initNodeGraph(file_uuid, default_context);
+    } catch (error) {
+        document.querySelector('.status-message').innerText = error.message;
+    }
 }
 
 function connectFileInput() {
@@ -100,7 +102,7 @@ function toggleSidebar() {
     })
 }
 
-function handleNodeGraph() {
+async function handleNodeGraph() {
     // Hide the BabylonJS canvas if needed.
     var canvas = document.getElementById('renderCanvas');
     if (canvas && canvas.style.display != 'none') {
@@ -114,7 +116,7 @@ function handleNodeGraph() {
         if (!latest_context) {
             latest_context = "/obj"
         }
-        fetch_node_graph(latestResponse, latest_context);
+        await fetch_node_graph(latestResponse, latest_context);
     }
 }
 
@@ -166,7 +168,9 @@ function setupSidebar() {
 
     const nodeGraph = document.getElementById('node-graph');
     nodeGraph.addEventListener('click', function(e) {
-        handleNodeGraph();
+        handleNodeGraph().catch(error => {
+            console.error("Failed to handle the Node Graph:", error);
+        });
     })
 
     const hipUploader = document.querySelector('.hip-upload')

@@ -1,0 +1,19 @@
+{
+  "name": "houdini-webapp",
+  "version": "1.0.0",
+  "description": "Houdini Web-Rendering App.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mushyfruit/houdini-web-rendering-interface.git"
+  },
+  "keywords": [
+    "houdini",
+    "web-rendering"
+  ],
+  "author": "mushyfruit",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mushyfruit/houdini-web-rendering-interface/issues"
+  },
+  "homepage": "https://github.com/mushyfruit/houdini-web-rendering-interface#readme"
+}

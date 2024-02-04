@@ -448,7 +448,8 @@ div[id$="_popper"][data-show] {
     padding-right: 20px;
 }
 
-#popper-node-context, #popper-node-operator {
+#popper-node-context{
+    margin-top: 2px;
     color: grey;
     font-size: 12px;
 }
