@@ -21,11 +21,11 @@ class ProgressFilter:
 
     _escape_char = "\b"
 
-    def __init__(self, redis_client, socket_id, node_name, stream=None):
+    def __init__(self, redis_client, socket_id, node_path, stream=None):
         self._orig_stream = stream
         self._redis_client = redis_client
         self._socket_id = socket_id
-        self._node_name = node_name
+        self._node_path = node_path
         self._regex = re.compile(r'ALF_PROGRESS (\d+)%')
         if not self._orig_stream:
             self._orig_stream = sys.__stdout__
@@ -99,7 +99,7 @@ class ProgressFilter:
             json_data = {
                 "progress": match_obj.group(1),
                 "socket_id": self._socket_id,
-                "node_name": self._node_name
+                "nodePath": self._node_path
             }
 
             self._redis_client.publish(cnst.PublishChannels.thumb_progress,

@@ -1,4 +1,4 @@
-
+let globalFileUuid = null;
 let poppers = {};
 const appState = {
     activeNode: null,
@@ -26,11 +26,12 @@ class NodeManager {
 
         // Track the context and file UUID
         this.latestFileUUID = null;
-        this.latestFileContext = null;
+        this.latestFileContext = "/obj";
 
         // Cache mapping node_path to node states.
         // Poppers are ephemeral, so store the relevant data fields here.
         this.nodeStateCache = new Map();
+        this.nodeViewCache = new Map();
     }
 
     addRender(nodePath, renderedFilename) {
@@ -40,13 +41,17 @@ class NodeManager {
 
     setFileUUID(fileUUID) {
         this.latestFileUUID = fileUUID;
-        if (this.poppersCache) {
-            this.poppersCache.clear();
+        if (this.nodeStateCache) {
+            this.nodeStateCache.clear();
         }
     }
 
     updateContext(nodeContext) {
         this.latestFileContext = nodeContext;
+    }
+
+    updateViewStateCache(parentContext, zoom, pan) {
+        this.nodeViewCache[parentContext] = { zoom, pan };
     }
 
     updateNodeStateCache(nodePath, key, value) {
@@ -78,7 +83,7 @@ class NodeManager {
         return this.latestFilename;
     }
 
-    getLastestContext() {
+    getLatestContext() {
         return this.latestFileContext;
     }
 
@@ -133,25 +138,40 @@ function initNodeGraph(file_uuid, default_context = "/obj") {
         }
     });
 
-    updateGraph(file_uuid, default_context).then(node_data => {
-        // Store the default playback range upon initial load.
-        appState.defaultStart = node_data.start
-        appState.defaultEnd = node_data.end
-        if (!appState.sessionId && node_data.session_id) {
-            appState.sessionId = node_data.session_id
+    cy.on('layoutstop', function() {
+        // Store the zoom and pan information per nodeContext.
+        // Restore once we've updated the node layout.
+        const currentContext = nodeGraphManager.getLatestContext();
+        if (currentContext in nodeGraphManager.nodeViewCache) {
+            const viewData = nodeGraphManager.nodeViewCache[currentContext];
+            if (viewData) {
+                cy.zoom(viewData.zoom);
+                cy.pan(viewData.pan);
+            }
         }
 
-        cy.add(node_data.elements);
-        cy.layout({ name: 'dagre' }).run();
-        generateContextButtons(cy, default_context, node_data.parent_icons);
-        setupPoppers(cy, node_data.category);
-        setupDblClick(cy)
+    })
 
-        // Store the current context for later retrieval.
-        nodeGraphManager.updateContext(default_context);
+    updateGraph(cy, default_context, file_uuid).then(nodeData => {
+        // Store the default playback range upon initial load.
+        appState.defaultStart = nodeData.start
+        appState.defaultEnd = nodeData.end
+        if (!appState.sessionId && nodeData.session_id) {
+            appState.sessionId = nodeData.session_id
+        }
+
+        displayNodeContext(cy, default_context, nodeData);
+        setupPoppers(cy);
+        setupDblClick(cy)
     }).catch(error => {
         console.error("Error processing graph update: ", error);
     })
+}
+
+function displayNodeContext(cy, nodeName, nodeData) {
+    generateContextButtons(cy, nodeName, nodeData.parent_icons);
+    cy.add(nodeData.elements);
+    cy.layout({ name: 'dagre' }).run()
 }
 
 function setupDblClick(cy) {
@@ -161,21 +181,13 @@ function setupDblClick(cy) {
             return;
         }
 
-        const node_name = node.data("path");
-        updateGraph(undefined, node_name).then(node_data => {
+        const nodeName = node.data("path");
+        updateGraph(cy, nodeName).then(node_data => {
             cy.elements().remove();
 
             // When shifting contexts, remove the previously stored poppers.
             deletePoppers();
-
-            // Update the context chevron buttons.
-            generateContextButtons(cy, node_name, node_data.parent_icons);
-
-            cy.add(node_data.elements);
-            cy.layout({ name: 'dagre' }).run();
-
-            // Store the current context for later retrieval.
-            nodeGraphManager.updateContext(node_name);
+            displayNodeContext(cy, nodeName, node_data);
 
             //setupPoppers(cy, node_data.category);
         }).catch(error => {
@@ -184,7 +196,7 @@ function setupDblClick(cy) {
     })
 }
 
-function setupPoppers(cy, nodeTypeCategory) {
+function setupPoppers(cy) {
     cy.on("click", "node", (event) => {
         const node = event.target
 
@@ -318,13 +330,11 @@ function generateContextButtons(cy, full_context, parent_icons) {
         }
 
         button.addEventListener('click', function (event) {
-            const fullPath = event.target.getAttribute('nodeFullPath');
-            updateGraph(undefined, fullPath).then(node_data => {
+            const nodeName = event.target.getAttribute('nodeFullPath');
+            updateGraph(cy, nodeName).then(nodeData => {
                 cy.elements().remove();
                 deletePoppers();
-                generateContextButtons(cy, fullPath, node_data.parent_icons);
-                cy.add(node_data.elements);
-                cy.layout({ name: 'dagre' }).run();
+                displayNodeContext(cy, nodeName, nodeData);
             })
         });
 
@@ -337,15 +347,17 @@ function generateContextButtons(cy, full_context, parent_icons) {
 
 function buildPopperDiv(node) {
     // Loader bar is located between geo1 and cook status.
-    nodeContext = node.data('path');
-    nodeCache = nodeGraphManager.getNodeStateCache(nodeContext);
+    const nodeContext = node.data('path');
+    const nodeCache = nodeGraphManager.getNodeStateCache(nodeContext);
 
-    nodeName = node.data('id');
-    nodeLastCooked = nodeCache?.lastCooked ?? node.data('cooktime');
+    const nodeName = node.data('id');
+    const nodeLastCooked = nodeCache?.lastCooked ?? node.data('cooktime');
 
-    nodeStartFrame = nodeCache?.startFrame ?? appState.defaultStart;
-    nodeEndFrame = nodeCache?.endFrame ?? appState.defaultEnd;
-    nodeStepFrame = nodeCache?.stepFrame ?? appState.defaultStep;
+    const nodeStartFrame = nodeCache?.startFrame ?? appState.defaultStart;
+    const nodeEndFrame = nodeCache?.endFrame ?? appState.defaultEnd;
+    const nodeStepFrame = nodeCache?.stepFrame ?? appState.defaultStep;
+    const thumbnailSource = nodeCache?.thumbnail ?? ""
+    const thumbnailDisplay = thumbnailSource ? "display: block;" : "display: none;";
 
     const html = `
         <div class="card">
@@ -354,18 +366,22 @@ function buildPopperDiv(node) {
                     <div id="node-context">
                         <p id="popper-node-name">${nodeName}</p>
                         <p id="popper-node-context">${nodeContext}</p>
+                        <!-- Placeholder for the image -->
+                        <div id="node-image-container">
+                            <img id="node-thumbnail" src="${thumbnailSource}" alt="Node thumbnail" data-node-path="${nodeContext}" style="${thumbnailDisplay}">
+                        </div>
                     </div>
                 </div>
                 <div id="node-cook-bar-container">
                     <div id="cooking-status" class="node-status-label">Progress:</div>
-                    <div id="cooking-bar" data-node-name="${nodeName}"></div>
+                    <div id="cooking-bar" data-node-path="${nodeContext}"></div>
                 </div>
                 <div id="node-status-container">
                     <div id="node-status">
                         <div class="node-status-label">
                             Last Cooked:
                         </div>
-                        <div class="node-status-value" id="node-last-cooked" data-node-name="${nodeName}">
+                        <div class="node-status-value" id="node-last-cooked" data-node-path="${nodeContext}">
                         </div>
                     </div>
                 </div>
@@ -435,9 +451,9 @@ function registerEventListeners() {
 }
 
 function handleRenderUpdate(data) {
-    let nodeName = data.nodeName;
+    let nodePath = data.nodePath;
     let progress = data.progress;
-    let bar = document.querySelector(`#cooking-bar[data-node-name="${nodeName}"]`);
+    let bar = document.querySelector(`#cooking-bar[data-node-path="${nodePath}"]`);
     if (bar) {
         bar.style.width = progress + '%';
     }
@@ -447,19 +463,23 @@ function handleThumbUpdate(data) {
     // Pass data to the rendered "page"
     // Just pass the data there.
     // Update underlying data structure?
-    console.log("THUMB")
     console.log(data);
 }
 
 function handleThumbFinish(data) {
-    nodeGraphManager.updateNodeStateCache(nodePath, "thumbnail", data.filename);
+    const thumbUrl = `/get_thumbnail/${data.fileName}`;
+    nodeGraphManager.updateNodeStateCache(data.nodePath, "thumbnail", thumbUrl);
+    const thumbnail = document.querySelector(`#node-thumbnail[data-node-path="${data.nodePath}"]`);
+    if (thumbnail) {
+        thumbnail.src = thumbUrl;
+        thumbnail.style.display = 'block';
+    }
 }
 
 function handleRenderFinish(data) {
-    nodePath = data.nodepath;
-    nodeGraphManager.addRender(nodePath, data.filename);
-    nodeGraphManager.updateNodeStateCache(nodePath, "has_cooked", true);
-    handlePostRender(nodePath);
+    nodeGraphManager.addRender(data.nodePath, data.filename);
+    nodeGraphManager.updateNodeStateCache(data.nodePath, "has_cooked", true);
+    handlePostRender(data.nodePath);
 }
 
 function startRenderTask(node) {
@@ -541,9 +561,7 @@ function getCurrentFormattedTime() {
 
 function handlePostRender(nodePath) {
     // Update the Last Cooked to include time data.
-    let segments = nodePath.split("/");
-    let nodeName = segments[segments.length - 1];
-    const last_cooked = document.querySelector(`.node-status-value[data-node-name="${nodeName}"]`);
+    const last_cooked = document.querySelector(`.node-status-value[data-node-path="${nodePath}"]`);
     if (last_cooked) {
         const cook_time = getCurrentFormattedTime();
         nodeGraphManager.updateNodeStateCache(nodePath, "lastCooked", cook_time)
@@ -551,22 +569,31 @@ function handlePostRender(nodePath) {
     }
 }
 
-async function updateGraph(file_uuid = globalFileUuid, node_name) {
+async function updateGraph(cy, nodeName, file_uuid = globalFileUuid) {
     if (!file_uuid) {
         throw new Error("Please pass a .hip UUID.");
     }
-    if (!node_name) {
+    if (!nodeName) {
         throw new Error("Node name is required.");
     }
 
     try {
+        let initialize_hip = false;
+        if (globalFileUuid == null) {
+            initialize_hip = true;
+        }
         globalFileUuid = file_uuid;
-
-        const response = await fetch(`/node_data?uuid=${file_uuid}&name=${node_name}`);
+        const response = await fetch(`/node_data?uuid=${file_uuid}&name=${nodeName}`);
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
+
+        if (!initialize_hip) {
+            const oldContext = nodeGraphManager.getLatestContext();
+            nodeGraphManager.updateViewStateCache(oldContext, cy.zoom(), cy.pan());
+        }
+        nodeGraphManager.updateContext(nodeName);
         return await response.json();
     } catch (error) {
         console.error("Error fetching node data: ", error);

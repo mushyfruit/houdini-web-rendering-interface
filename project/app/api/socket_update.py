@@ -112,10 +112,9 @@ def handle_render_completion(message_data):
         return
 
     filename = render_completion_data["render_file_path"].split(os.sep)[-1]
-
     socketio.emit(channel, {
-        'filename': filename,
-        'nodepath': render_completion_data["render_node_path"]
+        'fileName': filename,
+        'nodePath': render_completion_data["render_node_path"]
     },
                   room=render_completion_data["socket_id"])
 
@@ -123,12 +122,12 @@ def handle_render_completion(message_data):
 def handle_glb_progress_update(message_data):
     glb_progress_data = json.loads(message_data)
 
-    required_keys = {'render_node_name', 'progress', "socket_id"}
+    required_keys = {'render_node_path', 'progress', "socket_id"}
     if not validate_required_keys(glb_progress_data, required_keys):
         return
 
     socketio.emit(cnst.PublishChannels.node_render_update, {
-        'nodeName': glb_progress_data['render_node_name'],
+        'nodePath': glb_progress_data['render_node_path'],
         'progress': glb_progress_data['progress']
     },
                   room=glb_progress_data["socket_id"])
@@ -137,12 +136,12 @@ def handle_glb_progress_update(message_data):
 def handle_thumb_progress_update(message_data):
     thumb_data = json.loads(message_data)
 
-    required_keys = {'node_name', 'progress', "socket_id"}
+    required_keys = {'nodePath', 'progress', "socket_id"}
     if not validate_required_keys(thumb_data, required_keys):
         return
 
     socketio.emit(cnst.PublishChannels.node_thumb_update, {
-        'nodeName': thumb_data["node_name"],
+        'nodePath': thumb_data["nodePath"],
         'progress': float(thumb_data["progress"])
     },
                   room=thumb_data["socket_id"])

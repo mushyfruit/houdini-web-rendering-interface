@@ -80,7 +80,7 @@ def update_progress(rop_node, render_event_type, time):
         socket_id = rop_node.cachedUserData("socket_id")
         if socket_id is not None:
             render_update_data = {
-                "render_node_name": render_node.name(),
+                "render_node_path": render_node.path(),
                 "socket_id": socket_id,
                 "progress": progress
             }
@@ -120,7 +120,7 @@ def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path,
 
     redis_instance = redis_client.get_client_instance()
     stream_filter = progress_filter.ProgressFilter(redis_instance, socket_id,
-                                                   out_node.name())
+                                                   out_node.path())
     with stream_filter:
         out_node.render(verbose=True, output_progress=True)
 

@@ -35,7 +35,7 @@ function startRenderLoop() {
 // Handle loading and clearing models.
 function loadModel(fileName) {
     clearModels();
-    BABYLON.SceneLoader.Append("/static/temp/", fileName, scene,
+    BABYLON.SceneLoader.Append("/get_glb/", fileName, scene,
         function () {
             console.log("GLB Loaded Successfully!");
             scene.beginAnimation(scene, 0, 100, true);

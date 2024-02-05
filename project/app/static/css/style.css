@@ -448,6 +448,13 @@ div[id$="_popper"][data-show] {
     padding-right: 20px;
 }
 
+#node-thumbnail {
+    max-height: 200px;
+    max-width: 200px;
+    height: auto;
+    width: auto;
+}
+
 #popper-node-context{
     margin-top: 2px;
     color: grey;

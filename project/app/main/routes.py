@@ -5,7 +5,7 @@ import uuid
 from app.main import bp
 from app.api import hou_api
 from flask import (current_app, render_template,
-                   send_file, jsonify, request, session)
+                   send_file, jsonify, request, session, send_from_directory)
 from werkzeug.utils import secure_filename
 
 
@@ -18,7 +18,18 @@ def index():
     return render_template('index.html')
 
 
-@bp.route("/static/temp/<filename>", methods=['GET'])
+@bp.route("/get_thumbnail/<filename>", methods=['GET'])
+def get_thumbnail(filename):
+    if not filename.endswith(".png"):
+        filename += ".glb"
+
+    print(filename)
+    static_directory = os.path.join(current_app.static_folder, 'temp')
+    print(static_directory)
+    return send_from_directory(static_directory, filename)
+
+
+@bp.route("/get_glb/<filename>", methods=['GET'])
 def get_glb_file(filename):
     if not filename.endswith(".glb"):
         render_id = filename
@@ -62,7 +73,7 @@ def graph_data():
 
     # Avoid calling hou.hipFile.load if we've already loaded.
     if 'current_file_uuid' in session and file_uuid == session[
-            'current_file_uuid']:
+        'current_file_uuid']:
         node_data = hou_api.scan_and_display_nodes(parent_node, load=False)
         return jsonify(node_data), 200
 
