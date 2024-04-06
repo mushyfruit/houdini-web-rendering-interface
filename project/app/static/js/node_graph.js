@@ -142,6 +142,7 @@ function initNodeGraph(file_uuid, default_context = "/obj") {
         // Store the zoom and pan information per nodeContext.
         // Restore once we've updated the node layout.
         const currentContext = nodeGraphManager.getLatestContext();
+
         if (currentContext in nodeGraphManager.nodeViewCache) {
             const viewData = nodeGraphManager.nodeViewCache[currentContext];
             if (viewData) {
@@ -149,10 +150,13 @@ function initNodeGraph(file_uuid, default_context = "/obj") {
                 cy.pan(viewData.pan);
             }
         }
-
     })
 
-    updateGraph(cy, default_context, file_uuid).then(nodeData => {
+    // Expose methods for retrieving node graph state.
+    window.getCyZoom = function() { return cy.zoom(); };
+    window.getCyPan = function() { return cy.pan(); };
+
+    updateGraph(cy, default_context, file_uuid, false).then(nodeData => {
         // Store the default playback range upon initial load.
         appState.defaultStart = nodeData.start
         appState.defaultEnd = nodeData.end
@@ -208,9 +212,9 @@ function setupPoppers(cy) {
             const popperId = `${node.id()}_popper`;
             const popperDiv = document.getElementById(popperId);
             if (popperDiv.hasAttribute("data-show")) {
-                popperDiv.removeAttribute("data-show");
+                hidePopper(popperDiv);
             } else {
-                popperDiv.setAttribute("data-show", "true");
+                showPopper(popperDiv);
             }
         }
 
@@ -251,7 +255,7 @@ function createPopperForNode(cy, node) {
         poppers[popperId].update();
         const popperElement = document.getElementById(popperId);
         if (popperElement) {
-            popperElement.setAttribute("data-show", "true");
+            showPopper(popperElement);
         }
         return
     }
@@ -272,6 +276,16 @@ function createPopperForNode(cy, node) {
     cy.on('pan zoom resize', update);
 }
 
+function hidePopper(popperElement) {
+    popperElement.removeAttribute("data-show")
+    popperElement.style.pointerEvents = "none";
+}
+
+function showPopper(popperElement) {
+    popperElement.setAttribute("data-show", "true");
+    popperElement.style.pointerEvents = "auto";
+}
+
 function removePopper(node) {
     const popperId = `${node.id()}_popper`;
     if (poppers[popperId]) {
@@ -285,9 +299,8 @@ function removePopper(node) {
     }
     const popperElement = document.getElementById(popperId);
     if (popperElement) {
-        popperElement.removeAttribute("data-show")
+        hidePopper(popperElement);
     }
-
 }
 
 function generateContextButtons(cy, full_context, parent_icons) {
@@ -368,6 +381,7 @@ function buildPopperDiv(node) {
                         <p id="popper-node-context">${nodeContext}</p>
                         <!-- Placeholder for the image -->
                         <div id="node-image-container">
+                            <div id="loadingIndicator" class="loader_animation" data-node-path="${nodeContext}"></div>
                             <img id="node-thumbnail" src="${thumbnailSource}" alt="Node thumbnail" data-node-path="${nodeContext}" style="${thumbnailDisplay}">
                         </div>
                     </div>
@@ -469,6 +483,12 @@ function handleThumbUpdate(data) {
 function handleThumbFinish(data) {
     const thumbUrl = `/get_thumbnail/${data.fileName}`;
     nodeGraphManager.updateNodeStateCache(data.nodePath, "thumbnail", thumbUrl);
+
+    const loadingIndicator = document.querySelector(`#loadingIndicator[data-node-path="${data.nodePath}"]`);
+    if (loadingIndicator) {
+        loadingIndicator.style.display = 'none';
+    }
+
     const thumbnail = document.querySelector(`#node-thumbnail[data-node-path="${data.nodePath}"]`);
     if (thumbnail) {
         thumbnail.src = thumbUrl;
@@ -477,7 +497,7 @@ function handleThumbFinish(data) {
 }
 
 function handleRenderFinish(data) {
-    nodeGraphManager.addRender(data.nodePath, data.filename);
+    nodeGraphManager.addRender(data.nodePath, data.fileName);
     nodeGraphManager.updateNodeStateCache(data.nodePath, "has_cooked", true);
     handlePostRender(data.nodePath);
 }
@@ -516,6 +536,15 @@ function startRenderTask(node) {
 
                 // TODO Display successful submission
                 console.log(response.message);
+                const loadingIndicator = document.querySelector(`#loadingIndicator[data-node-path="${nodePath}"]`);
+                if (loadingIndicator) {
+                    loadingIndicator.style.display = 'block';
+                }
+
+                const thumbnail = document.querySelector(`#node-thumbnail[data-node-path="${nodePath}"]`);
+                if (thumbnail) {
+                    thumbnail.style.display = 'none';
+                }
             }
         }
     )
@@ -569,7 +598,7 @@ function handlePostRender(nodePath) {
     }
 }
 
-async function updateGraph(cy, nodeName, file_uuid = globalFileUuid) {
+async function updateGraph(cy, nodeName, file_uuid = globalFileUuid, store_view_state = true) {
     if (!file_uuid) {
         throw new Error("Please pass a .hip UUID.");
     }
@@ -589,10 +618,11 @@ async function updateGraph(cy, nodeName, file_uuid = globalFileUuid) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        if (!initialize_hip) {
+        if (store_view_state) {
             const oldContext = nodeGraphManager.getLatestContext();
             nodeGraphManager.updateViewStateCache(oldContext, cy.zoom(), cy.pan());
         }
+
         nodeGraphManager.updateContext(nodeName);
         return await response.json();
     } catch (error) {

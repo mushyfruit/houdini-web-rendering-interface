@@ -1,8 +1,6 @@
-import sys
 import math
 import json
 import logging
-import argparse
 
 import hou
 
@@ -144,27 +142,27 @@ def generate_thumbnail(render_data, hip_path):
 
     render_obj = hou.node(render_data["node_path"])
 
-    # Need a SOP node to calculate the OBJ's bbox.
-    if render_obj.type().category().name() == 'Sop':
-        sop_geo = render_obj.geometry().freeze()
-        render_obj = render_obj.parent()
-        render_obj.setDisplayFlag(True)
-    else:
-        sop_geo = render_obj.displayNode().geometry().freeze()
+    with RenderContextManager(render_obj):
+        # Need a SOP node to calculate the OBJ's bbox.
+        if render_obj.type().category().name() == 'Sop':
+            sop_geo = render_obj.geometry().freeze()
+            render_obj = render_obj.parent()
+        else:
+            sop_geo = render_obj.displayNode().geometry().freeze()
 
-    # UI is not available, can't use hou.GeometryViewport.frameSelected() :(
-    frame_selected_bbox(render_obj, out_camera, sop_geo)
+        # UI is not available, can't use hou.GeometryViewport.frameSelected() :(
+        frame_selected_bbox(render_obj, out_camera, sop_geo)
 
-    node_path = render_data["node_path"]
-    thumbnail_path = render_data["thumbnail_path"]
-    socket_id = render_data["socket_id"]
+        thumbnail_path = render_data["thumbnail_path"]
+        socket_id = render_data["socket_id"]
 
-    render_thumbnail_with_karma(node_path, out_camera.path(), thumbnail_path,
-                                socket_id)
-    on_completion_notification(node_path,
-                               thumbnail_path,
-                               cnst.BackgroundRenderType.thumbnail,
-                               socket_id=socket_id)
+        render_thumbnail_with_karma(render_obj.path(),
+                                    out_camera.path(), thumbnail_path,
+                                    socket_id)
+        on_completion_notification(render_data["node_path"],
+                                   thumbnail_path,
+                                   cnst.BackgroundRenderType.thumbnail,
+                                   socket_id=socket_id)
 
 
 def frame_selected_bbox(render_obj, camera, sop_geo):
@@ -224,7 +222,7 @@ def on_completion_notification(node_path,
         if completed_render_node is None:
             logging.error("Unable to trigger notification "
                           "on node: {0}".format(" ".join(
-                              [node_path, render_type])))
+                [node_path, render_type])))
             return None
         socket_id = completed_render_node.cachedUserData("socket_id")
 
@@ -241,3 +239,35 @@ def on_completion_notification(node_path,
     redis_instance = redis_client.get_client_instance()
     redis_instance.publish(cnst.PublishChannels.render_completion,
                            render_update_json)
+
+
+class RenderContextManager:
+    def __init__(self, render_obj, parent=None):
+        self.render_obj = render_obj
+        self.parent = parent
+
+        self.initial_display_flag = None
+        self.initial_render_flag = None
+
+        self.display_node = None
+        self.render_node = None
+
+        object_category = self.render_obj.type().category()
+        self.sop_context = object_category.name() == 'Sop'
+
+    def __enter__(self):
+        if self.sop_context:
+            self.display_node = self.render_obj.parent().displayNode()
+            self.render_node = self.render_obj.parent().renderNode()
+            self.initial_render_flag = self.render_obj.isRenderFlagSet()
+            self.render_obj.setRenderFlag(True)
+
+        self.initial_display_flag = self.render_obj.isDisplayFlagSet()
+        self.render_obj.setDisplayFlag(True)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.sop_context:
+            self.display_node.setDisplayFlag(True)
+            self.render_node.setRenderFlag(True)
+            self.render_obj.setRenderFlag(self.initial_render_flag)
+        self.render_obj.setDisplayFlag(self.initial_display_flag)

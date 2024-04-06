@@ -112,7 +112,7 @@ async function handleNodeGraph() {
     // Latest upload UUID is stored upon upload.
     let latestResponse = nodeGraphManager.getLatestUUID();
     if (latestResponse) {
-        let latest_context = nodeGraphManager.getLastestContext();
+        let latest_context = nodeGraphManager.getLatestContext();
         if (!latest_context) {
             latest_context = "/obj"
         }
@@ -120,9 +120,18 @@ async function handleNodeGraph() {
     }
 }
 
+function onNodeGraphExit() {
+    let cy = document.getElementById('cy');
+    if (cy) {
+        const oldContext = nodeGraphManager.getLatestContext();
+        nodeGraphManager.updateViewStateCache(oldContext, window.getCyZoom(), window.getCyPan());
+    }
+    deletePoppers();
+}
+
 function handleDisplayModel() {
     // Remove any lingering popper elements.
-    deletePoppers();
+    onNodeGraphExit();
 
     // Restart the render loop and unhide the render canvas.
     showRenderCanvas();
