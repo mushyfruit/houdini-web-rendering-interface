@@ -1,11 +1,13 @@
 import os
 from flask import Flask, request
 from flask_socketio import SocketIO
+from flask_session import Session
 
 from celery import Celery, Task
 from config import Config
 
 socketio = SocketIO()
+sess = Session()
 
 
 def celery_init_app(app):
@@ -29,6 +31,8 @@ def create_app(config_class=Config):
     # Initialize from Config and environment.
     app.config.from_object(config_class)
     app.config.from_prefixed_env()
+
+    sess.init_app(app)
 
     socketio.init_app(app)
 

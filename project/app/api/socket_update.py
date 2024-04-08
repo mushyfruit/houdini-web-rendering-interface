@@ -3,8 +3,8 @@ import json
 import uuid
 from flask import request, current_app, session
 
-from app import socketio
-from app.api import redis_client, hou_api, utils, constants as cnst
+from app import socketio, redis_client
+from app.api import hou_api, utils, constants as cnst
 
 logger = utils.get_logger("celery_listener")
 
@@ -112,6 +112,9 @@ def handle_render_completion(message_data):
         return
 
     filename = render_completion_data["render_file_path"].split(os.sep)[-1]
+
+    # TODO log entry in redis.
+
     socketio.emit(channel, {
         'fileName': filename,
         'nodePath': render_completion_data["render_node_path"]

@@ -4,7 +4,8 @@ import logging
 
 import hou
 
-from app.api import redis_client, progress_filter, constants as cnst
+from app.api import progress_filter, constants as cnst
+from app import redis_client
 
 
 def render_glb(render_data, hip_path):

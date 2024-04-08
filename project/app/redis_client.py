@@ -23,3 +23,20 @@ class RedisClient:
 
 def get_client_instance():
     return RedisClient.get_client_instance()
+
+
+def add_unique_filename(user_uuid, original_filename, file_uuid):
+    redis_conn = RedisClient.get_client_instance()
+
+    redis_conn.hset(f"user:{user_uuid}", f"file:{file_uuid}", original_filename)
+
+    # Maintain separate set structure to test for uniqueness.
+    added = redis_conn.sadd(f"user:{user_uuid}:filenames_set", file_uuid)
+
+    # Add to list to ensure order is maintained.
+    if added == 1:
+        redis_conn.rpush(f"user:{user_uuid}:filenames_list", file_uuid)
+
+
+def add_render_id(user_uuid, file_uuid, render_id):
+    pass

@@ -1,9 +1,27 @@
 document.addEventListener('DOMContentLoaded', (event) => {
+    getUserID();
     connectFileInput();
     toggleSidebar();
     setupSidebar();
     connectHIP();
 });
+
+function getUserID() {
+    let userUuid = localStorage.getItem("userUuid");
+    if (!userUuid) {
+        fetch('generate_user_uuid')
+            .then(response => response.json())
+            .then(data => {
+                userUuid = data.user_uuid;
+                localStorage.setItem("userUuid", userUuid);
+                console.log("New user UUID generated and stored:", userUuid)
+            })
+            .catch(error => console.error(error))
+    } else {
+        console.log("Found existing UUID for the user:", userUuid);
+    }
+}
+
 
 async function connectHIP() {
     const uploadForm = document.querySelector('.uploadForm')
@@ -102,6 +120,28 @@ function toggleSidebar() {
     })
 }
 
+async function handleStoredModels() {
+    onNodeGraphExit();
+
+    var canvas = document.getElementById('renderCanvas');
+    if (canvas && canvas.style.display != 'none') {
+        hideRenderCanvas();
+    }
+
+    // Retrieve data from redis server...
+    // try {
+    //     const response = await fetch(`stored_models/${encodeURIComponent(file_uuid)}`);
+    //     if (!response.ok) {
+    //         throw new Error('Failed to load the node graph...');
+    //     }
+
+
+    // Show the stored models page.
+    document.querySelector('.main-body').innerHTML = '';
+}
+
+
+
 async function handleNodeGraph() {
     // Hide the BabylonJS canvas if needed.
     var canvas = document.getElementById('renderCanvas');
@@ -171,16 +211,23 @@ function setupSidebar() {
     })
 
     const displayModel = document.getElementById('display-model');
-    displayModel.addEventListener('click', function(e) {
+    displayModel.addEventListener('click', (e) => {
         handleDisplayModel();
     });
 
     const nodeGraph = document.getElementById('node-graph');
-    nodeGraph.addEventListener('click', function(e) {
+    nodeGraph.addEventListener('click', (e) => {
         handleNodeGraph().catch(error => {
             console.error("Failed to handle the Node Graph:", error);
         });
-    })
+    });
+
+    const storedModels = document.getElementById('stored-models');
+    storedModels.addEventListener('click', (e) => {
+        handleStoredModels().catch(error => {
+            console.error("Failed to handle the Stored Model:", error);
+        })
+    });
 
     const hipUploader = document.querySelector('.hip-upload')
     hipUploader.addEventListener('click', function(e) {

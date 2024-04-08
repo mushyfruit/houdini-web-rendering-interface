@@ -2,6 +2,7 @@ import os
 import glob
 import uuid
 
+from app import redis_client
 from app.main import bp
 from app.api import hou_api
 from flask import (current_app, render_template,
@@ -16,6 +17,13 @@ def index():
     if "session_id" not in session:
         session["session_id"] = str(uuid.uuid4())
     return render_template('index.html')
+
+
+@bp.route("/generate_user_uuid", methods=["GET"])
+def generate_user_uuid():
+    user_uuid = str(uuid.uuid4())
+    session["user_uuid"] = user_uuid
+    return jsonify(user_uuid=user_uuid)
 
 
 @bp.route("/get_thumbnail/<filename>", methods=['GET'])
@@ -115,7 +123,8 @@ def handle_upload():
         return jsonify({"message": "No file was selected."}), 400
 
     if hip_file and allowed_hip(hip_file.filename):
-        _, ext = os.path.splitext(secure_filename(hip_file.filename))
+        sanitized_filename = secure_filename(hip_file.filename)
+        _, ext = os.path.splitext(sanitized_filename)
         file_uuid = str(uuid.uuid4())
         filename = "{0}{1}".format(file_uuid, ext)
 
@@ -123,6 +132,9 @@ def handle_upload():
             session['uploaded_files'] = []
 
         session['uploaded_files'].append(file_uuid)
+
+        # Store user's uploaded .hip file in redis instance.
+        redis_client.add_unique_filename(session["user_uuid"], sanitized_filename, file_uuid)
 
         file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
         hip_file.save(file_path)
@@ -132,6 +144,18 @@ def handle_upload():
         }), 200
     else:
         return jsonify({"message": "File type not allowed"}), 400
+
+
+@bp.route('/stored_models', methods=['GET'])
+def retrieve_stored_models():
+    key = request.args.get('file_uuid')
+    if not key:
+        return jsonify({"message": "Invalid request. Specify a key."}), 400
+
+    stored_model_data = redis_client.get_client_instance().get(key)
+    print(stored_model_data)
+    if stored_model_data is not None:
+        return jsonify({'value': stored_model_data.decode('utf-8')})
 
 
 def allowed_hip(filename):
