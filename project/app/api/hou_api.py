@@ -25,8 +25,8 @@ import zipfile
 import threading
 import urllib.parse
 
-from app import tasks
-from app.api import socket_update, constants as cnst
+from app import tasks, constants as cnst
+from app.api import socket_update
 
 _icon_mapping = {}
 _redis_thread = None

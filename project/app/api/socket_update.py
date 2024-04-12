@@ -3,8 +3,8 @@ import json
 import uuid
 from flask import request, current_app, session
 
-from app import socketio, redis_client
-from app.api import hou_api, utils, constants as cnst
+from app import socketio, redis_client, constants as cnst
+from app.api import hou_api, utils
 
 logger = utils.get_logger("celery_listener")
 
@@ -31,6 +31,7 @@ def receive_render_task(render_data):
                                               start=start,
                                               end=end,
                                               step=step,
+                                              user_uuid=session[cnst.CURRENT_FILE_UUID],
                                               socket_id=socket_id)
         logger.info(render_struct)
         result = hou_api.submit_node_for_render(render_struct)
@@ -97,7 +98,8 @@ def handle_render_completion(message_data):
     render_completion_data = json.loads(message_data)
 
     required_keys = {
-        'render_type', 'render_node_path', 'render_file_path', 'socket_id'
+        'user_uuid', 'render_type', 'render_node_path',
+        'render_file_path', 'socket_id'
     }
     if not validate_required_keys(render_completion_data, required_keys):
         return
@@ -113,7 +115,10 @@ def handle_render_completion(message_data):
 
     filename = render_completion_data["render_file_path"].split(os.sep)[-1]
 
-    # TODO log entry in redis.
+    redis_client.store_render_data(render_type,
+                                   render_completion_data["user_uuid"],
+                                   render_completion_data["render_file_path"],
+                                   render_completion_data["render_node_path"])
 
     socketio.emit(channel, {
         'fileName': filename,

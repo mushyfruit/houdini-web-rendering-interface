@@ -5,6 +5,7 @@ import uuid
 from app import redis_client
 from app.main import bp
 from app.api import hou_api
+from app.constants import CURRENT_FILE_UUID
 from flask import (current_app, render_template,
                    send_file, jsonify, request, session, send_from_directory)
 from werkzeug.utils import secure_filename
@@ -26,14 +27,25 @@ def generate_user_uuid():
     return jsonify(user_uuid=user_uuid)
 
 
+@bp.route("/set_existing_user_uuid", methods=["POST"])
+def set_existing_user_uuid():
+    data = request.get_json()
+    user_uuid = data.get('userUuid')
+
+    if user_uuid:
+        print("Setting existing session user ID to {}".format(user_uuid))
+        session["user_uuid"] = user_uuid
+        return jsonify({'status': 'success', 'message': 'UUID set in session'}), 200
+    else:
+        return jsonify({'status': 'error', 'message': 'No UUID provided'}), 400
+
+
 @bp.route("/get_thumbnail/<filename>", methods=['GET'])
 def get_thumbnail(filename):
     if not filename.endswith(".png"):
         filename += ".glb"
 
-    print(filename)
     static_directory = os.path.join(current_app.static_folder, 'temp')
-    print(static_directory)
     return send_from_directory(static_directory, filename)
 
 
@@ -80,22 +92,28 @@ def graph_data():
         return jsonify({"error": "A file UUID is required."}), 400
 
     # Avoid calling hou.hipFile.load if we've already loaded.
-    if 'current_file_uuid' in session and file_uuid == session[
-        'current_file_uuid']:
+    if file_uuid == session.get(CURRENT_FILE_UUID, None):
         node_data = hou_api.scan_and_display_nodes(parent_node, load=False)
         return jsonify(node_data), 200
 
     # Locate the file on disk. Search for UUID prefix.
+    # Handles searching for .hip, .hiplc, and .hipnc files.
     search_pattern = os.path.join(current_app.config['UPLOAD_FOLDER'],
-                                  "{0}.*".format(file_uuid))
+                                  "{0}.hip*".format(file_uuid))
 
     matching_files = glob.glob(search_pattern)
     if not matching_files:
         return jsonify({"error": "No matching files with provided UUID."}), 400
 
+    if len(matching_files) > 1:
+        # Potentially indicates need for cleanup or strange collision issue.
+        return jsonify({"error": "Multiple files found."}), 500
+
     hip_file = matching_files[0]
     node_data = hou_api.scan_and_display_nodes(parent_node, hip_file=hip_file)
-    session['current_file_uuid'] = file_uuid
+
+    # Store the current file UUID for later use when storing render data in redis.
+    session[CURRENT_FILE_UUID] = file_uuid
 
     # Store UUID for socketIO room.
     if "session_id" not in session:
@@ -133,11 +151,23 @@ def handle_upload():
 
         session['uploaded_files'].append(file_uuid)
 
-        # Store user's uploaded .hip file in redis instance.
-        redis_client.add_unique_filename(session["user_uuid"], sanitized_filename, file_uuid)
-
+        # Store user's uploaded .hip file name in redis instance.
         file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
-        hip_file.save(file_path)
+        for item in session.keys():
+            print(item)
+
+        is_unique_hip, file_hash = redis_client.add_unique_filename(
+            session["user_uuid"], sanitized_filename, file_uuid, hip_file)
+
+        if is_unique_hip:
+            hip_file.save(file_path)
+        else:
+            # File has already been saved for the user. Find that and return the file uuid.
+            file_uuid = redis_client.retrieve_uuid_from_filename(session["user_uuid"], file_hash)
+            if file_uuid is None:
+                return jsonify({"message": "File hash matched, but unable to retrieve file."}), 400
+            print("Located existing file with matching hash for: {0}".format(sanitized_filename))
+
         return jsonify({
             "uuid": file_uuid,
             "message": "File upload successful."
@@ -148,14 +178,16 @@ def handle_upload():
 
 @bp.route('/stored_models', methods=['GET'])
 def retrieve_stored_models():
-    key = request.args.get('file_uuid')
-    if not key:
-        return jsonify({"message": "Invalid request. Specify a key."}), 400
+    user_uuid = request.args.get('userUuid')
+    if not user_uuid:
+        return jsonify({"message": "Invalid request. Specify a user_uuid."}), 400
 
-    stored_model_data = redis_client.get_client_instance().get(key)
+    stored_model_data = redis_client.get_user_uploaded_file_dicts(user_uuid)
     print(stored_model_data)
-    if stored_model_data is not None:
-        return jsonify({'value': stored_model_data.decode('utf-8')})
+    if stored_model_data:
+        return jsonify({'model_data': stored_model_data})
+    else:
+        return jsonify({"message": "Invalid model data. Specify a key."}), 400
 
 
 def allowed_hip(filename):

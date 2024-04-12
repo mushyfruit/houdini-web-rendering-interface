@@ -10,15 +10,31 @@ function getUserID() {
     let userUuid = localStorage.getItem("userUuid");
     if (!userUuid) {
         fetch('generate_user_uuid')
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to generate new UUID');
+                return response.json();
+            })
             .then(data => {
                 userUuid = data.user_uuid;
                 localStorage.setItem("userUuid", userUuid);
                 console.log("New user UUID generated and stored:", userUuid)
             })
-            .catch(error => console.error(error))
+            .catch(error => console.error("Error generating UUID:", error));
     } else {
         console.log("Found existing UUID for the user:", userUuid);
+        fetch('set_existing_user_uuid', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ userUuid: userUuid })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to set existing UUID');
+            return response.json();
+        })
+        .then(data => console.log('Success:', data))
+        .catch(error => console.error('Error setting UUID on server:', error));
     }
 }
 
@@ -128,13 +144,24 @@ async function handleStoredModels() {
         hideRenderCanvas();
     }
 
-    // Retrieve data from redis server...
-    // try {
-    //     const response = await fetch(`stored_models/${encodeURIComponent(file_uuid)}`);
-    //     if (!response.ok) {
-    //         throw new Error('Failed to load the node graph...');
-    //     }
+    const userUuid = localStorage.getItem("userUuid");
+    if (userUuid !== null) {
+        console.log("The user UUID is:", userUuid);
 
+        try {
+            const response = await fetch(`stored_models?userUuid=${encodeURIComponent(userUuid)}`);
+
+            if (!response.ok) {
+                throw new Error(`Failed to load the node graph, status: ${response.status}`);
+            }
+            const data = await response.json();
+            console.log("Stored model data:", data);
+        } catch (error) {
+            console.error("Error fetching node graph:", error.message);
+        }
+    } else {
+        console.log("No user UUID found in localStorage.");
+    }
 
     // Show the stored models page.
     document.querySelector('.main-body').innerHTML = '';

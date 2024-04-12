@@ -6,7 +6,7 @@ import time
 import logging
 import threading
 
-from app.api import constants as cnst
+from app import constants as cnst
 
 
 class ProgressFilter:

@@ -4,8 +4,8 @@ import logging
 
 import hou
 
-from app.api import progress_filter, constants as cnst
-from app import redis_client
+from app.api import progress_filter
+from app import redis_client, constants as cnst
 
 
 def render_glb(render_data, hip_path):
@@ -63,6 +63,7 @@ def render_glb(render_data, hip_path):
         on_completion_notification(node_path,
                                    glb_path,
                                    cnst.BackgroundRenderType.glb_file,
+                                   render_data["user_uuid"],
                                    socket_id=render_data["socket_id"])
     finally:
         out_node.removeRenderEventCallback(update_progress)
@@ -160,9 +161,11 @@ def generate_thumbnail(render_data, hip_path):
         render_thumbnail_with_karma(render_obj.path(),
                                     out_camera.path(), thumbnail_path,
                                     socket_id)
+
         on_completion_notification(render_data["node_path"],
                                    thumbnail_path,
                                    cnst.BackgroundRenderType.thumbnail,
+                                   render_data["user_uuid"],
                                    socket_id=socket_id)
 
 
@@ -217,6 +220,7 @@ def frame_selected_bbox(render_obj, camera, sop_geo):
 def on_completion_notification(node_path,
                                render_path,
                                render_type,
+                               user_uuid,
                                socket_id=None):
     if socket_id is None:
         completed_render_node = hou.node(node_path)
@@ -228,6 +232,7 @@ def on_completion_notification(node_path,
         socket_id = completed_render_node.cachedUserData("socket_id")
 
     render_completion_data = {
+        "user_uuid": user_uuid,
         "render_file_path": render_path,
         "render_node_path": node_path,
         "render_type": render_type,
