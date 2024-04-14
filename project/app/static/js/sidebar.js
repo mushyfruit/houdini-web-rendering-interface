@@ -127,6 +127,12 @@ function toggleSidebar() {
         if (!sidebar.classList.contains('file-upload') && (sidebar.classList.contains('active'))) {
             sidebar.style.transitionDuration = '0.5s';
         }
+
+        const storedModels = document.querySelector('.stored-models');
+        if (storedModels) {
+           handleStoredModelsToggle(storedModels, sidebar, false);
+        }
+
         const transitionEnded = function() {
             sidebar.removeEventListener('transitionend', transitionEnded)
             sidebar.style.transitionDuration = '';
@@ -144,29 +150,73 @@ async function handleStoredModels() {
         hideRenderCanvas();
     }
 
+    // Clear the node graph and prepare to show stored models page.
+    document.querySelector('.main-body').innerHTML = '';
+
+    try {
+        const response = await fetch('stored_models');
+        if (!response.ok) {
+            throw new Error('Failed to load the stored models...');
+        }
+        const htmlContent = await response.text();
+
+        const storedModelsDiv = document.createElement('div');
+        storedModelsDiv.className = 'stored-models';
+        storedModelsDiv.innerHTML = htmlContent;
+        initializeStoredModels(storedModelsDiv);
+
+        document.querySelector('.main-body').appendChild(storedModelsDiv);
+
+    } catch (error) {
+        document.querySelector('.status-message').innerText = error.message;
+    }
+
     const userUuid = localStorage.getItem("userUuid");
     if (userUuid !== null) {
         console.log("The user UUID is:", userUuid);
 
         try {
-            const response = await fetch(`stored_models?userUuid=${encodeURIComponent(userUuid)}`);
+            const response = await fetch(`get_stored_models?userUuid=${encodeURIComponent(userUuid)}`);
 
             if (!response.ok) {
                 throw new Error(`Failed to load the node graph, status: ${response.status}`);
             }
             const data = await response.json();
-            console.log("Stored model data:", data);
+            populateFiles(data.model_data);
+
         } catch (error) {
-            console.error("Error fetching node graph:", error.message);
+            console.error("Error fetching stored models:", error.message);
         }
     } else {
         console.log("No user UUID found in localStorage.");
     }
-
-    // Show the stored models page.
-    document.querySelector('.main-body').innerHTML = '';
 }
 
+function populateFiles(files) {
+    if (!Array.isArray(files)) {
+        console.error('Invalid input: expected an array, got', typeof files);
+        return;
+    }
+
+    const container = document.getElementById('models-container');
+    container.innerHTML = '';
+
+    files.forEach(file => {
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'content';
+        container.appendChild(contentDiv);
+
+        if (file.thumb) {
+            Object.entries(file.thumb).forEach(([key, value]) => {
+                const img = document.createElement('img');
+                img.src = value;
+                contentDiv.appendChild(img);
+            });
+        }
+
+    })
+
+}
 
 
 async function handleNodeGraph() {
@@ -266,6 +316,11 @@ function setupSidebar() {
             sidebar.classList.toggle('active')
         }
 
+        const storedModels = document.querySelector('.stored-models');
+        if (storedModels) {
+            handleStoredModelsToggle(storedModels, sidebar, true);
+        }
+
         const transitionEnded = function() {
             sidebar.removeEventListener('transitionend', transitionEnded)
             sidebar.style.transitionDuration = '';
@@ -334,5 +389,44 @@ function removeClassFromElements(elements, className) {
 }
 
 function toggleClass(element, className) {
-    element.classList.toggle(className)
+    toggled = element.classList.toggle(className);
+}
+
+function initializeStoredModels(storedModels) {
+    const defaultWidth = '256px';
+    const activeWidth = '92px';
+    const fileUploadWidth = '385px';
+
+    const sidebar = document.querySelector('.sidebar');
+    let finalValue = sidebar.classList.contains('active') ? activeWidth : defaultWidth;
+    finalValue = sidebar.classList.contains('file-upload') ? fileUploadWidth : finalValue;
+    storedModels.style.marginLeft = finalValue;
+
+}
+
+function handleStoredModelsToggle(storedModels, sidebar, toggled_button) {
+
+    // Set transition based on sidebar's current transition time.
+    const style = window.getComputedStyle(sidebar);
+    storedModels.style.transition = style.transitionDuration;
+
+    const defaultWidth = '256px';
+    const activeWidth = '92px';
+    const fileUploadWidth = '385px';
+
+    let finalValue = sidebar.classList.contains('active') ? activeWidth : defaultWidth;
+    if (toggled_button) {
+         if (sidebar.classList.contains('file-upload')) {
+             setTimeout(() => {
+                 finalValue = sidebar.classList.contains('file-upload') ? `${finalValue}` : '385px';
+                 storedModels.style.marginLeft = finalValue;
+             }, 350);
+             return;
+         } else {
+             finalValue = fileUploadWidth;
+         }
+    } else {
+        finalValue = sidebar.classList.contains('active') ? activeWidth : defaultWidth;
+    }
+    storedModels.style.marginLeft = finalValue;
 }

@@ -25,7 +25,6 @@ class RedisClient:
                                                db=0)
 
             # Flush the DB for testing purposes.
-            print("flushing")
             cls._client_instance.flushdb()
 
         return cls._client_instance
@@ -57,8 +56,6 @@ def get_file_hash(hip_file, buffer_size=16384):
 
     hip_file.seek(0)
     hex_digest = sha256.hexdigest()
-
-    print("File hashed: {}".format(hex_digest))
     return hex_digest
 
 

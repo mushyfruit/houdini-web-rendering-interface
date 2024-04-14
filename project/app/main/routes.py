@@ -127,6 +127,10 @@ def graph_data():
 def get_node_graph():
     return render_template('node_graph.html'), 200
 
+@bp.route("/stored_models", methods=['GET'])
+def get_stored_models():
+    return render_template('stored_models.html'), 200
+
 
 # hwebserver.registerWSGIApp doesn't support multipart form requests.
 # Avoid using that as backend.
@@ -152,14 +156,11 @@ def handle_upload():
         session['uploaded_files'].append(file_uuid)
 
         # Store user's uploaded .hip file name in redis instance.
-        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
-        for item in session.keys():
-            print(item)
-
         is_unique_hip, file_hash = redis_client.add_unique_filename(
             session["user_uuid"], sanitized_filename, file_uuid, hip_file)
 
         if is_unique_hip:
+            file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
             hip_file.save(file_path)
         else:
             # File has already been saved for the user. Find that and return the file uuid.
@@ -176,7 +177,7 @@ def handle_upload():
         return jsonify({"message": "File type not allowed"}), 400
 
 
-@bp.route('/stored_models', methods=['GET'])
+@bp.route('/get_stored_models', methods=['GET'])
 def retrieve_stored_models():
     user_uuid = request.args.get('userUuid')
     if not user_uuid:
