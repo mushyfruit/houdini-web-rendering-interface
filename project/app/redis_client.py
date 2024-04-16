@@ -98,8 +98,8 @@ def retrieve_uuid_from_filename(redis_conn, user_uuid, file_hash):
 
 
 @with_redis_conn
-def store_render_data(redis_conn, render_type, hip_file_uuid, render_path, node_path):
-    redis_conn.hset(f"file_render_data:{hip_file_uuid}:{render_type}", node_path, render_path)
+def store_render_data(redis_conn, render_type, hip_file_uuid, filename, node_path):
+    redis_conn.hset(f"file_render_data:{hip_file_uuid}:{render_type}", node_path, filename)
 
 
 @with_redis_conn

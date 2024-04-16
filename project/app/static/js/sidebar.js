@@ -198,24 +198,75 @@ function populateFiles(files) {
         return;
     }
 
+    const cachedMetadata = localStorage.getItem("stored-model-metadata");
+    const metadata = cachedMetadata ? JSON.parse(cachedMetadata) : {};
+
     const container = document.getElementById('models-container');
     container.innerHTML = '';
 
     files.forEach(file => {
         const contentDiv = document.createElement('div');
-        contentDiv.className = 'content';
-        container.appendChild(contentDiv);
+        contentDiv.className = 'model-content';
+        contentDiv.id = `model-${file.file_uuid}`;
 
+        container.appendChild(contentDiv);
         if (file.thumb) {
             Object.entries(file.thumb).forEach(([key, value]) => {
-                const img = document.createElement('img');
-                img.src = value;
-                contentDiv.appendChild(img);
+                if (!metadata[key] || metadata[key] != value) {
+                    const thumbCard = document.createElement('div');
+                    thumbCard.className = 'thumb-card';
+                    thumbCard.id = `thumb-card-${key}`;
+
+                    const thumbUrl = `/get_thumbnail/${value}`;
+                    const img = document.createElement('img');
+                    img.src = thumbUrl;
+                    img.className = 'model-img'
+                    img.id = `thumb-card-img-${key}`;
+                    img.style.display = 'block';
+
+                    img.addEventListener('click', function() {
+                        const key = this.id.split('thumb-card-img-')[1];
+
+                        const cachedMetadata = localStorage.getItem("stored-model-metadata");
+                        const metadata = cachedMetadata ? JSON.parse(cachedMetadata) : {};
+
+                        const data = metadata[key];
+                        handleDisplayModel(data.glb);
+                    });
+
+                    const cardBody = document.createElement('div');
+                    cardBody.className = 'model-card-body';
+
+                    const cardTitle = document.createElement('h6');
+                    cardTitle.className = 'card-title'
+                    cardTitle.innerText = key;
+
+                    const cardText = document.createElement('p');
+                    cardText.innerText = "lorem ipsum";
+                    cardText.className = 'card-text'
+
+                    cardBody.appendChild(cardTitle);
+                    cardBody.appendChild(cardText);
+                    thumbCard.appendChild(img);
+                    thumbCard.appendChild(cardBody);
+                    contentDiv.appendChild(thumbCard);
+
+                    metadata[key] = {
+                        imgUrl: thumbUrl,
+                        title: key,
+                        text: "Lorem ipsum",
+                        glb: file.glb[key]
+                    };
+                }
             });
         }
 
-    })
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'stored-model-info'
+        contentDiv.appendChild(infoDiv);
+    });
 
+    localStorage.setItem("stored-model-metadata", JSON.stringify(metadata));
 }
 
 
@@ -246,7 +297,7 @@ function onNodeGraphExit() {
     deletePoppers();
 }
 
-function handleDisplayModel() {
+function handleDisplayModel(render=null) {
     // Remove any lingering popper elements.
     onNodeGraphExit();
 
@@ -257,7 +308,12 @@ function handleDisplayModel() {
     document.querySelector('.main-body').innerHTML = '';
 
     // Grab the latest render.
-    latest_filename = nodeGraphManager.getLatestRender();
+    if (!render) {
+        latest_filename = nodeGraphManager.getLatestRender();
+    } else {
+        latest_filename = render
+    }
+
     if (latest_filename) {
         loadModel(latest_filename);
     } else {
@@ -401,7 +457,7 @@ function initializeStoredModels(storedModels) {
     let finalValue = sidebar.classList.contains('active') ? activeWidth : defaultWidth;
     finalValue = sidebar.classList.contains('file-upload') ? fileUploadWidth : finalValue;
     storedModels.style.marginLeft = finalValue;
-
+    document.documentElement.style.setProperty('--dynamic-margin-left', finalValue);
 }
 
 function handleStoredModelsToggle(storedModels, sidebar, toggled_button) {
@@ -420,6 +476,7 @@ function handleStoredModelsToggle(storedModels, sidebar, toggled_button) {
              setTimeout(() => {
                  finalValue = sidebar.classList.contains('file-upload') ? `${finalValue}` : '385px';
                  storedModels.style.marginLeft = finalValue;
+                 document.documentElement.style.setProperty('--dynamic-margin-left', finalValue);
              }, 350);
              return;
          } else {
@@ -429,4 +486,5 @@ function handleStoredModelsToggle(storedModels, sidebar, toggled_button) {
         finalValue = sidebar.classList.contains('active') ? activeWidth : defaultWidth;
     }
     storedModels.style.marginLeft = finalValue;
+    document.documentElement.style.setProperty('--dynamic-margin-left', finalValue);
 }

@@ -117,7 +117,7 @@ def handle_render_completion(message_data):
 
     redis_client.store_render_data(render_type,
                                    render_completion_data["user_uuid"],
-                                   render_completion_data["render_file_path"],
+                                   filename,
                                    render_completion_data["render_node_path"])
 
     socketio.emit(channel, {
