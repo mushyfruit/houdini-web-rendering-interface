@@ -114,9 +114,14 @@ def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path,
     out_node.parm("objects").set(node_path)
     out_node.parm("picture").set(thumbnail_path)
 
-    # output_progress on Karma Node doesn't output ALF_PROGRESS
-    # Have to ensure -a/A flag is passed to husk command:
-    out_node.parm("verbosity").set("a")
+    # Workaround for <= 19.5 hou versions:
+    #     output_progress on Karma Node doesn't output ALF_PROGRESS
+    #     Have to ensure -a/A flag is passed to husk command:
+
+    #out_node.parm("verbosity").set("a")
+
+    # For >= 20.0 hou version
+    out_node.parm("alfprogress").set(True)
 
     redis_instance = redis_client.get_client_instance()
     stream_filter = progress_filter.ProgressFilter(redis_instance, socket_id,

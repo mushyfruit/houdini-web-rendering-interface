@@ -39,6 +39,10 @@ class NodeManager {
         this.latestFilename = renderedFilename;
     }
 
+    updateLatestRender(renderedFilename) {
+        this.latestFilename = renderedFilename;
+    }
+
     setFileUUID(fileUUID) {
         this.latestFileUUID = fileUUID;
         if (this.nodeStateCache) {
@@ -381,7 +385,6 @@ function buildPopperDiv(node) {
                         <p id="popper-node-context">${nodeContext}</p>
                         <!-- Placeholder for the image -->
                         <div id="node-image-container">
-                            <div id="loadingIndicator" class="loader_animation" data-node-path="${nodeContext}"></div>
                             <img id="node-thumbnail" src="${thumbnailSource}" alt="Node thumbnail" data-node-path="${nodeContext}" style="${thumbnailDisplay}">
                         </div>
                     </div>
@@ -484,17 +487,27 @@ function handleThumbFinish(data) {
     const thumbUrl = `/get_thumbnail/${data.fileName}`;
     nodeGraphManager.updateNodeStateCache(data.nodePath, "thumbnail", thumbUrl);
 
-    const loadingIndicator = document.querySelector(`#loadingIndicator[data-node-path="${data.nodePath}"]`);
-    if (loadingIndicator) {
-        loadingIndicator.style.display = 'none';
-    }
-
     const thumbnail = document.querySelector(`#node-thumbnail[data-node-path="${data.nodePath}"]`);
     if (thumbnail) {
         thumbnail.src = thumbUrl;
         thumbnail.style.display = 'block';
     }
+
+    // Update the Stored Models Page
+    updateStoredModelEntry(data);
+
 }
+
+function updateStoredModelEntry(data) {
+    const loadingAnimation = document.querySelector(`.animation-holder[data-node-path="${data.nodePath}"]`);
+    const thumbCard = document.getElementById(`thumb-card-${data.nodePath}`);
+
+    if (loadingAnimation && thumbCard) {
+        const img = createThumbnail(data.fileName, data.nodePath);
+        loadingAnimation.parentNode.replaceChild(img, loadingAnimation);
+    }
+}
+
 
 function handleRenderFinish(data) {
     nodeGraphManager.addRender(data.nodePath, data.fileName);
@@ -535,12 +548,10 @@ function startRenderTask(node) {
                 }
 
                 // TODO Display successful submission
-                console.log(response.message);
-                const loadingIndicator = document.querySelector(`#loadingIndicator[data-node-path="${nodePath}"]`);
-                if (loadingIndicator) {
-                    loadingIndicator.style.display = 'block';
-                }
+                console.log(response.message)
 
+
+                // Hide the thumbnail (if it exists)
                 const thumbnail = document.querySelector(`#node-thumbnail[data-node-path="${nodePath}"]`);
                 if (thumbnail) {
                     thumbnail.style.display = 'none';

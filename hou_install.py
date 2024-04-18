@@ -14,13 +14,13 @@ import util.sidefx as sidefx
 logging.basicConfig(level=logging.INFO)
 
 DEFAULT_DL_FOLDER = "hou_download"
-MIN_HOUDINI = 19.5
+MIN_HOUDINI = 20.0
 
 
 def valid_version(version):
     """Validate that the version downloaded supports Python3.9.
 
-    Currently, the Dockerfile and all other setup is for Houdini releases
+    Currently, the Dockerfile and all other setup are targeting Houdini releases
     that are built against python 3.9.
     """
     try:
@@ -32,6 +32,7 @@ def valid_version(version):
         raise argparse.ArgumentTypeError("Version must be {0} or higher.".format(MIN_HOUDINI))
     return version_num
 
+
 def parse_args():
     parser = argparse.ArgumentParser(add_help=True)
 
@@ -40,17 +41,24 @@ def parse_args():
                         dest="clear_downloads",
                         action='store_true',
                         help='Indicate whether to clear previous downloads.')
-    
+
     parser.add_argument('-k',
                         dest="keep_tar",
                         action='store_true',
                         help='Indicate whether to keep .tar.gz file after extracting.')
-    
-    parser.add_argument('version', 
-                        help="Version of Houdini to download (>=19.5)", 
+
+    parser.add_argument('-p',
+                        dest="product",
+                        action='store',
+                        type=str,
+                        help='Indicate which product to download.')
+
+    parser.add_argument('version',
+                        help="Version of Houdini to download (>=19.5)",
                         type=valid_version)
-    
+
     return parser.parse_args()
+
 
 def fetch_or_resume(response, dl_location):
     with open(dl_location, 'ab') as f:
@@ -60,7 +68,7 @@ def fetch_or_resume(response, dl_location):
         progress_bar = tqdm(
             total=total_size, unit='KB',
             unit_scale=True, desc="Downloading"
-            )
+        )
         for chunk in response.iter_content(block_size):
             progress_bar.update(len(chunk))
             f.write(chunk)
@@ -78,11 +86,14 @@ def download_houdini(service, args):
 
     """
     hou_response = service.download.get_daily_build_download(
-        product='houdini', version=str(args.version), build='production', platform='linux')
+        product=args.product or 'houdini-py39',
+        version=str(args.version),
+        build='production',
+        platform='linux'
+    )
     if not isinstance(hou_response, dict):
         logging.error(hou_response)
         return
-
 
     filename = hou_response['filename']
     if os.environ.get("DOCKER_DL"):
@@ -99,8 +110,8 @@ def download_houdini(service, args):
         resume_header = {'Range': 'bytes=%d-' % os.path.getsize(dl_location)}
     else:
         resume_header = {}
-    
-    response = requests.get(hou_response['download_url'], 
+
+    response = requests.get(hou_response['download_url'],
                             headers=resume_header, stream=True)
     if response.status_code == 200 or response.status_code == 206:
         fetch_or_resume(response, dl_location)
@@ -113,7 +124,7 @@ def download_houdini(service, args):
         return dl_location, hou_response
     else:
         logging.info(response.status_code)
-        raise Exception("Unable to download Houdini at" 
+        raise Exception("Unable to download Houdini at"
                         f"{response['download_url']}")
     return dl_location, hou_response
 
@@ -152,6 +163,7 @@ def ensure_empty_dir(directory):
     if os.path.exists(directory):
         shutil.rmtree(directory)
     os.makedirs(directory)
+
 
 def get_houdini_write_path(filename):
     parent_directory = os.path.dirname(os.getcwd())

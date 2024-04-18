@@ -30,7 +30,7 @@ COPY --from=houdini-downloader /code/houdini_install/requirements_app.txt .
 RUN python3.9 -m pip install --upgrade --no-cache-dir -r requirements_app.txt
 
 ARG EULA_DATE="2021-10-13"
-RUN yes | /houdiniInstaller/build/houdini.install --auto-install --accept-EULA ${EULA_DATE} --make-dir /opt/houdini/build > /output.log 2>&1
+RUN yes | /houdiniInstaller/build/houdini.install --auto-install --install-sidefxlabs --accept-EULA ${EULA_DATE} --make-dir /opt/houdini/build > /output.log 2>&1
 RUN rm -r /houdiniInstaller
 
 # THIRD STAGE: Copy houdini-install image and un-cache unnecessary installation files
