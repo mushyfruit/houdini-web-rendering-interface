@@ -1,22 +1,107 @@
 var canvas = document.getElementById('renderCanvas');
+
+//Engine(canvasOrContext, antialias, options, adaptToDeviceRatio);
 var engine = new BABYLON.Engine(canvas, true);
-var scene = new BABYLON.Scene(engine);
 
-// Initialize camera and light
-const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 15, new BABYLON.Vector3(0, 0, 0));
-camera.attachControl(canvas, true);
-camera.maxZ = 50000;
+var scene = create_scene();
 
-const hemisphericLight = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, 0));
-hemisphericLight.intensity = 0.6;
+function create_scene() {
+    var scene = new BABYLON.Scene(engine);
 
-const directionalLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(-1, -2, -1), scene);
-directionalLight.intensity = 1.2;
+    const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 15, new BABYLON.Vector3(0, 0, 0));
+    camera.attachControl(canvas, true);
 
-const shadowGenerator = new BABYLON.ShadowGenerator(1024, directionalLight);
-shadowGenerator.useExponentialShadowMap = true;
+    // Adjust the scrolling zoom speed.
+    camera.wheelPrecision = 50;
+    camera.maxZ = 50000;
 
-var created_meshes = [];
+    const hemisphericLight = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, 0));
+    hemisphericLight.intensity = 0.6;
+
+    const directionalLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(-1, -2, -1), scene);
+    directionalLight.intensity = 0;
+
+    const shadowGenerator = new BABYLON.ShadowGenerator(1024, directionalLight);
+    shadowGenerator.useExponentialShadowMap = true;
+    shadowGenerator.useKernelBlur = true;
+
+    // Skybox
+    var skybox = new BABYLON.Mesh.CreateBox("skyBox", 10000, scene);
+    skybox.infiniteDistance = true;
+
+    const skyboxes = [
+        "overcast_sky.env",
+        "photo_studio_small.env",
+    ].map((url, index, arr) => {
+        const skyboxTexture = new BABYLON.CubeTexture(`/get_skybox/${url}`, scene);
+        const skybox = scene.createDefaultSkybox(skyboxTexture, true, 10000, 0.1);
+        return { skybox, skyboxTexture }
+    });
+
+    function setCurrentSkybox(index) {
+        for (var i = 0; i < skyboxes.length; i++) {
+            const {skybox} = skyboxes[i];
+            skybox.setEnabled(i === index);
+        }
+        const {skyboxTexture} = skyboxes[index];
+        scene.environmentTexture = skyboxTexture;
+    }
+
+    setCurrentSkybox(0);
+
+    scene.environmentTexture.level = .65;
+    scene.environmentIntensity = 0.4;
+
+    const highPassKernel = [
+        0, -1/8, 0,
+        -1/8, 1.25, -1/8,
+        0, -1/8, 0,
+    ];
+    const highPass = new BABYLON.ConvolutionPostProcess("highPass", highPassKernel, 1.0, camera);
+
+    // Set up Ambient Occlusion
+    var ssaoRatio = {
+        ssaoRatio: 0.5,
+        blurRatio: 0.5
+    };
+
+    var ssao = new BABYLON.SSAO2RenderingPipeline("ssao", scene, ssaoRatio, null, false);
+    ssao.radius = .5;
+    ssao.totalStrength = 1.0;
+    ssao.expensiveBlur = false;
+    ssao.samples = 16;
+    ssao.maxZ = 250;
+
+    scene.postProcessRenderPipelineManager.attachCamerasToRenderPipeline("ssao", camera);
+
+    var isAttached = true;
+    window.addEventListener("keydown", function (evt) {
+        // draw SSAO with scene when pressed "1"
+        if (evt.keyCode === 49) {
+            if (!isAttached) {
+                isAttached = true;
+                scene.postProcessRenderPipelineManager.attachCamerasToRenderPipeline("ssao", camera);
+            }
+            scene.postProcessRenderPipelineManager.enableEffectInPipeline("ssao", ssao.SSAOCombineRenderEffect, camera);
+        }
+            // draw without SSAO when pressed "2"
+        else if (evt.keyCode === 50) {
+            isAttached = false;
+            scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline("ssao", camera);
+        }
+            // draw only SSAO when pressed "2"123
+        else if (evt.keyCode === 51) {
+            if (!isAttached) {
+                isAttached = true;
+                scene.postProcessRenderPipelineManager.attachCamerasToRenderPipeline("ssao", camera);
+            }
+            scene.postProcessRenderPipelineManager.disableEffectInPipeline("ssao", ssao.SSAOCombineRenderEffect, camera);
+        }
+    });
+
+    return scene;
+}
+
 
 function onInit() {
     var canvas = document.getElementById('renderCanvas');
@@ -27,31 +112,6 @@ function onInit() {
     window.addEventListener('resize', () => {
         engine.resize();
     });
-
-    var skybox = new BABYLON.Mesh.CreateBox("skyBox", 1000, scene);
-    skybox.infiniteDistance = true;
-    //console.log(skybox);
-
-    var skyboxMaterial = new BABYLON.StandardMaterial("skyBox", scene);
-    skyboxMaterial.backFaceCulling = false;
-    //skyboxMaterial.disableLighting = true;
-
-    var files = [
-        "/get_skybox/skybox_nx.jpg",
-        "/get_skybox/skybox_py.jpg",
-        "/get_skybox/skybox_nz.jpg",
-        "/get_skybox/skybox_px.jpg",
-        "/get_skybox/skybox_ny.jpg",
-        "/get_skybox/skybox_pz.jpg",
-    ];
-
-    skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
-    skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
-
-    skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture.CreateFromImages(files, scene);
-    skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
-
-    skybox.material = skyboxMaterial;
 
     startRenderLoop();
     loadModel("placeholder.glb");
@@ -75,8 +135,19 @@ function loadModel(fileName) {
     BABYLON.SceneLoader.ImportMeshAsync(null, "/get_glb/", fileName, scene).then(result => {
         console.log("GLB Loaded Successfully!");
         result.meshes.forEach(mesh => {
-            created_meshes.push(mesh);
-            shadowGenerator.addShadowCaster(mesh);
+            mesh.metadata = { imported: true }
+            if (mesh.material && mesh.material instanceof BABYLON.PBRMaterial) {
+                mesh.material.microSurface = 0.2;
+            }
+
+            // TODO Open panel to show current node's params? Fire off another render?
+            mesh.actionManager = new BABYLON.ActionManager(scene);
+            mesh.actionManager.registerAction(
+              new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickTrigger, () =>
+                  console.log("hi"),
+              ),
+            );
+
         });
     }).catch(error => {
         console.log("Error loading the GLB file:", error);
@@ -84,8 +155,9 @@ function loadModel(fileName) {
 }
 
 function clearModels() {
-    created_meshes.forEach(mesh => {
-        if (mesh !== camera) {
+    // Dispose of any meshes previously loaded.
+    scene.meshes.forEach(mesh => {
+        if (mesh.metadata && mesh.metadata.imported) {
             mesh.dispose();
         }
     });
