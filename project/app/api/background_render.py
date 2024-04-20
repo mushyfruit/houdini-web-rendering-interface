@@ -23,11 +23,18 @@ def render_glb(render_data, hip_path):
 
     render_node = hou.node(node_path)
     if not render_node:
+        logging.error("Invalid node path passed. Unable to locate node.")
         return False
 
-    if render_node.type().category().name() != 'Sop':
-        if not render_node.displayNode():
+    render_path = node_path
+    parent_path = None
+    if render_node.type().category() != hou.sopNodeTypeCategory():
+        if not render_node.renderNode():
+            logging.error("No render node specified for {0}".format(node_path))
             return False
+        else:
+            parent_path = render_node.path()
+            render_path = render_node.renderNode().path()
 
     out_node = hou.node("/out/{0}".format(cnst.GLB_ROP))
     if out_node is None:
@@ -37,7 +44,7 @@ def render_glb(render_data, hip_path):
     # Set up the GLTF ROP Node.
     out_node.parm("trange").set("normal")
     out_node.parm("usesoppath").set(True)
-    out_node.parm("soppath").set(node_path)
+    out_node.parm("soppath").set(render_path)
 
     logging.info("Rendering to: {0}".format(glb_path))
     out_node.parm('file').set(glb_path)
@@ -51,8 +58,13 @@ def render_glb(render_data, hip_path):
         f_parm.deleteAllKeyframes()
         f_parm.set(frames[i])
 
+    # TODO bake chop data?
+
     # Store the redis socket ID for retrieval in callback.
     out_node.setCachedUserData("socket_id", render_data["socket_id"])
+    if parent_path is not None:
+        out_node.setCachedUserData("parent_path", parent_path)
+
     out_node.addRenderEventCallback(update_progress)
 
     try:
@@ -63,24 +75,29 @@ def render_glb(render_data, hip_path):
         on_completion_notification(node_path,
                                    glb_path,
                                    cnst.BackgroundRenderType.glb_file,
-                                   render_data["user_uuid"],
+                                   render_data["file_uuid"],
                                    socket_id=render_data["socket_id"])
     finally:
         out_node.removeRenderEventCallback(update_progress)
+        out_node.destroyCachedUserData("parent_path", must_exist=False)
         out_node.destroyCachedUserData("socket_id", must_exist=False)
 
 
 def update_progress(rop_node, render_event_type, time):
     # Update the correct loading bar with "data-node-name" attribute via `nodeName`.
     if render_event_type == hou.ropRenderEventType.PostFrame:
-        render_node = rop_node.parm("soppath").evalAsNode()
+
+        render_node_path = rop_node.cachedUserData("parent_path")
+        if render_node_path is None:
+            render_node_path = rop_node.parm("soppath").evalAsNode().path()
+
         end_frame = rop_node.parm("f2").evalAsFloat()
         progress = (hou.intFrame() / end_frame) * 100.0
 
         socket_id = rop_node.cachedUserData("socket_id")
         if socket_id is not None:
             render_update_data = {
-                "render_node_path": render_node.path(),
+                "render_node_path": render_node_path,
                 "socket_id": socket_id,
                 "progress": progress
             }
@@ -170,7 +187,7 @@ def generate_thumbnail(render_data, hip_path):
         on_completion_notification(render_data["node_path"],
                                    thumbnail_path,
                                    cnst.BackgroundRenderType.thumbnail,
-                                   render_data["user_uuid"],
+                                   render_data["file_uuid"],
                                    socket_id=socket_id)
 
 
@@ -225,7 +242,7 @@ def frame_selected_bbox(render_obj, camera, sop_geo):
 def on_completion_notification(node_path,
                                render_path,
                                render_type,
-                               user_uuid,
+                               file_uuid,
                                socket_id=None):
     if socket_id is None:
         completed_render_node = hou.node(node_path)
@@ -237,7 +254,7 @@ def on_completion_notification(node_path,
         socket_id = completed_render_node.cachedUserData("socket_id")
 
     render_completion_data = {
-        "user_uuid": user_uuid,
+        "file_uuid": file_uuid,
         "render_file_path": render_path,
         "render_node_path": node_path,
         "render_type": render_type,

@@ -17,6 +17,11 @@ def receive_render_task(render_data):
     step = render_data.get('step')
     node_path = render_data.get('path')
 
+    # Can't rely on session object for file_uuid as if HTTP route
+    # make change to session, it doesn't seem to update WebSocket connection.
+    # Instead, pass the file_uuid via the NodeGraphManager.
+    file_uuid = render_data.get('file')
+
     try:
         if not node_path:
             raise ValueError("Invalid submission node provided.")
@@ -31,7 +36,7 @@ def receive_render_task(render_data):
                                               start=start,
                                               end=end,
                                               step=step,
-                                              user_uuid=session[cnst.CURRENT_FILE_UUID],
+                                              file_uuid=file_uuid,
                                               socket_id=socket_id)
         logger.info(render_struct)
         result = hou_api.submit_node_for_render(render_struct)
@@ -98,7 +103,7 @@ def handle_render_completion(message_data):
     render_completion_data = json.loads(message_data)
 
     required_keys = {
-        'user_uuid', 'render_type', 'render_node_path',
+        'file_uuid', 'render_type', 'render_node_path',
         'render_file_path', 'socket_id'
     }
     if not validate_required_keys(render_completion_data, required_keys):
@@ -116,11 +121,18 @@ def handle_render_completion(message_data):
     filename = render_completion_data["render_file_path"].split(os.sep)[-1]
 
     redis_client.store_render_data(render_type,
-                                   render_completion_data["user_uuid"],
+                                   render_completion_data["file_uuid"],
                                    filename,
                                    render_completion_data["render_node_path"])
 
+    # TODO
+    print({
+        'hipFile': render_completion_data["file_uuid"],
+        'fileName': filename,
+        'nodePath': render_completion_data["render_node_path"]
+    })
     socketio.emit(channel, {
+        'hipFile': render_completion_data["file_uuid"],
         'fileName': filename,
         'nodePath': render_completion_data["render_node_path"]
     },

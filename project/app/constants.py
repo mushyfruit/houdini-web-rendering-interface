@@ -19,7 +19,7 @@ class PublishChannels(object):
 class RenderTaskStruct(
         namedtuple(
             "RenderTaskStruct",
-            "node_path glb_path thumbnail_path start end step user_uuid socket_id")):
+            "node_path glb_path thumbnail_path start end step file_uuid socket_id")):
     """Immutable data struct defining necessary fields to perform the
     render task.
 
@@ -35,3 +35,4 @@ GLB_ROP = "preview_glb1_webrender"
 DEFAULT_RES = 512
 
 ICON_ZIP_PATH = "${HFS}/houdini/config/Icons/icons.zip"
+UNCOOKABLE_NODE_TYPES = ["cam", "bone", "light"]

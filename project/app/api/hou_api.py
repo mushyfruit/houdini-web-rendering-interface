@@ -76,7 +76,8 @@ def process_hip_for_node_structure(root_node):
                     "category": str(node.type().nameWithCategory()).lower(),
                     "color": convert_rgb01_to_rgb255(node.color().rgb()),
                     "cooktime": get_last_cooktime(node),
-                    "can_enter": can_enter_node(node)
+                    "can_enter": can_enter_node(node),
+                    "can_cook": list(is_node_cookable(node, root_node.childTypeCategory()))
                 }
             }
 
@@ -185,3 +186,38 @@ def get_last_cooktime(node):
     cached_data = node.cachedUserDataDict()
     if "cook_time" not in cached_data:
         return None
+
+
+def is_node_cookable(node, parent_category_name):
+    if parent_category_name == hou.sopNodeTypeCategory():
+        # Possible that no valid render geometry is found
+        # but let the users render anyway.
+        return True, ''
+
+    if parent_category_name == hou.objNodeTypeCategory():
+        # Perform basic validation:
+        node_type_name = node.type().name()
+        if node.type().isManager() and node.type().name() != "objnet":
+            error_msg = "Unable to render manager node type {0}.".format(node_type_name.capitalize())
+            return False, error_msg
+
+        render_node = node.renderNode()
+        if render_node is None:
+            error_msg = "{0} does not contain a valid render node.".format(node.name())
+            return False, error_msg
+
+        if render_node.geometry() is None:
+            error_msg = ("{0} does not contain a render node "
+                         "with valid geometry.").format(node.name())
+            return False, error_msg
+
+        error_msg = "{0} is an uncookable node type.".format(node_type_name.capitalize())
+        for uncookable_type in cnst.UNCOOKABLE_NODE_TYPES:
+            if uncookable_type in node_type_name:
+                return False, error_msg
+
+        return True, ''
+
+    # Only OBJ and SOPs are supported ATM.
+    error_msg = "Only OBJ and SOP context nodes are renderable."
+    return False, error_msg

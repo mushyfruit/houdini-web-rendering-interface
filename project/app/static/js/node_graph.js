@@ -415,14 +415,48 @@ function buildPopperDiv(node) {
                 </div>
             </div>
         </div>`;
+
+
+    const truncated_html = `
+        <div class="card">
+            <div class="card-body">
+                <div id="node-context-container">
+                    <div id="node-context">
+                        <p id="popper-node-name">${nodeName}</p>
+                        <p id="popper-node-context">${nodeContext}</p>
+                    </div>
+                </div>
+                <div id="node-status-container" class="invalid-node">
+                    <div id="node-status">
+                        <div class="node-status-label">
+                            Invalid Status:
+                        </div>
+                        <div class="node-status-value">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+
     const div = document.createElement("div");
     div.id = `${node.id()}_popper`;
     document.body.appendChild(div);
-    div.innerHTML = html;
+
+    if (node.data('can_cook')[0]) {
+        div.innerHTML = html;
+    } else {
+        const error_msg = node.data('can_cook')[1];
+        div.innerHTML = truncated_html;
+
+        const status_value = div.querySelector(".node-status-value");
+        status_value.textContent = error_msg;
+    }
 
     div.setAttribute('data-show', 'true');
     const nodeStatusValue = div.querySelector("#node-last-cooked");
-    nodeStatusValue.textContent = nodeLastCooked || "Uncooked";
+    if (nodeStatusValue) {
+        nodeStatusValue.textContent = nodeLastCooked || "Uncooked";
+    }
 
     // Allow for CSS to pickup on transition.
     setTimeout(() => {
@@ -430,9 +464,12 @@ function buildPopperDiv(node) {
     }, 20);
 
     const button = div.querySelector('#submitRender');
-    button.addEventListener('click', function () {
-        handleSubmit(node);
-    });
+    if (button) {
+        button.addEventListener('click', function () {
+            handleSubmit(node);
+        });
+    }
+
 
     const frameInputs = document.querySelectorAll('.frame-input');
     frameInputs.forEach(input => {
@@ -499,11 +536,16 @@ function handleThumbFinish(data) {
 }
 
 function updateStoredModelEntry(data) {
-    const loadingAnimation = document.querySelector(`.animation-holder[data-node-path="${data.nodePath}"]`);
-    const thumbCard = document.getElementById(`thumb-card-${data.nodePath}`);
+    const fileContainer = document.querySelector(`.file-container[file-uuid="${data.hipFile}"]`);
+    if (!fileContainer) {
+        return;
+    }
+
+    const loadingAnimation = fileContainer.querySelector(`.animation-holder[data-node-path="${data.nodePath}"]`);
+    const thumbCard = fileContainer.querySelector(`.thumb-card[data-node-path="${data.nodePath}"]`);
 
     if (loadingAnimation && thumbCard) {
-        const img = createThumbnail(data.fileName, data.nodePath);
+        const img = createThumbnail(data.fileName, data.nodePath, data.hipFile);
         loadingAnimation.parentNode.replaceChild(img, loadingAnimation);
     }
 }
@@ -534,7 +576,7 @@ function startRenderTask(node) {
     // Emit the render task event.
     appState.socket.timeout(5000).emit(
         'submit_render_task',
-        { 'start': start, 'end': end, 'step': step, 'path': nodePath },
+        { 'start': start, 'end': end, 'step': step, 'path': nodePath, 'file': nodeGraphManager.getLatestUUID() },
         (err, response) => {
             if (err) {
                 // Server doesn't acknowledge event within timeout.

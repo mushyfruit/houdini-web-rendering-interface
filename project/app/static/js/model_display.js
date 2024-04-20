@@ -29,6 +29,8 @@ function create_scene() {
     var skybox = new BABYLON.Mesh.CreateBox("skyBox", 10000, scene);
     skybox.infiniteDistance = true;
 
+    // Generate .env from .hdr file: https://www.babylonjs.com/tools/ibl/
+    // Custom packing IBL environment into single, optimized file.
     const skyboxes = [
         "overcast_sky.env",
         "photo_studio_small.env",
@@ -147,6 +149,8 @@ function loadModel(fileName) {
                   console.log("hi"),
               ),
             );
+
+        scene.beginAnimation(scene, 0, 100, true);
 
         });
     }).catch(error => {

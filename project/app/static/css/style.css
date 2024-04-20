@@ -30,6 +30,7 @@ body {
     width: calc(100% - var(--dynamic-margin-left));
     height: 100%;
     padding: 15px;
+    overflow-y: auto;
 }
 
 .main-container {
@@ -482,6 +483,13 @@ div[id$="_popper"][data-show] {
     background-color: #292b35;
 }
 
+#node-status-container.invalid-node {
+    padding: 10px;
+    border-bottom-left-radius: 5px;
+    border-bottom-right-radius: 5px;
+}
+
+
 #node-status {
     display: flex;
     align-items: center;
@@ -633,17 +641,36 @@ label[for="start-frame"] {
     padding: 10px;
 }
 
+.name-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding: 15px;
+}
+
+.file-name-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f0f0f0;
+    color: #333;
+    border-radius: 8px;
+    padding: 8px 16px;
+    margin: 10px 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    font-size: 16px;
+    width: 90%;
+    max-width: 400px;
+    box-sizing: border-box;
+}
+
 .model-content {
     display: flex;
     flex-wrap: wrap;
     flex-direction: row;
     justify-content: flex-start;
     gap: 15px;
-}
-
-.model-content img {
-  width: 100px;
-  height: auto;
 }
 
 .thumb-card {
@@ -664,21 +691,46 @@ label[for="start-frame"] {
 
 .model-card-body {
     padding: 15px 20px 20px;
-}
-
-.card-title {
-    font-size: 20px;
-    font-weight: 500;
-    color: #333;
+    width: 275px;
 }
 
 .card-title {
     font-size: 18px;
     color: #333;
+    white-space: nowrap;
 }
 
 .thumb-card:hover .model-img {
     filter: brightness(70%);
     box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
     cursor: pointer;
+}
+
+#renderAllBtn {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    padding: 10px 20px;
+    font-size: 16px;
+    color: #fff;
+    text-transform: uppercase;
+    background-color: #007BFF;
+    background-image: linear-gradient(rgba(255, 255, 255, 0), rgba(255, 255, 255, 0)), linear-gradient(59deg, #6a7ba2, #445677);
+    background-origin: border-box;
+    background-clip: content-box, border-box;
+    border: solid 2px transparent;
+    border-radius: 0.6rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 2px 1000px 1px rgba(22, 22, 22, 0.75) inset;
+    transition: all 250ms;
+    z-index: 1000;
+}
+
+#renderAllBtn:hover {
+    box-shadow: none;
+}
+
+#renderAllBtn:active {
+    background-image: linear-gradient(rgba(255, 255, 255, 0), rgba(255, 255, 255, 0)), linear-gradient(23deg, #5b6677, #2b3448);
 }

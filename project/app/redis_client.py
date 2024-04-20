@@ -101,6 +101,11 @@ def retrieve_uuid_from_filename(redis_conn, user_uuid, file_hash):
 def store_render_data(redis_conn, render_type, hip_file_uuid, filename, node_path):
     redis_conn.hset(f"file_render_data:{hip_file_uuid}:{render_type}", node_path, filename)
 
+    # Store latest render time for GLB file exports.
+    if render_type == cnst.BackgroundRenderType.glb_file:
+        render_time = datetime.datetime.utcnow()
+        redis_conn.hset(f"file_render_data:{hip_file_uuid}:render_time", node_path, render_time.isoformat())
+
 
 @with_redis_conn
 def get_user_uploaded_file_dicts(redis_conn, user_uuid):
@@ -122,10 +127,13 @@ def get_user_uploaded_file_dicts(redis_conn, user_uuid):
             file_uuid = file_dict["file_uuid"]
             render_data = redis_conn.hgetall(f"file_render_data:{file_uuid}:{cnst.BackgroundRenderType.glb_file}")
             thumb_data = redis_conn.hgetall(f"file_render_data:{file_uuid}:{cnst.BackgroundRenderType.thumbnail}")
+            cook_data = redis_conn.hgetall(f"file_render_data:{file_uuid}:render_time")
             if render_data:
                 file_dict[cnst.BackgroundRenderType.glb_file] = decode_redis_hash(render_data)
             if thumb_data:
                 file_dict[cnst.BackgroundRenderType.thumbnail] = decode_redis_hash(thumb_data)
+            if cook_data:
+                file_dict["cook_data"] = decode_redis_hash(cook_data)
 
     return file_info_list
 
