@@ -168,6 +168,7 @@ function initNodeGraph(file_uuid, default_context = "/obj") {
             appState.sessionId = nodeData.session_id
         }
 
+        setupRenderAllButton()
         displayNodeContext(cy, default_context, nodeData);
         setupPoppers(cy);
         setupDblClick(cy)
@@ -177,9 +178,31 @@ function initNodeGraph(file_uuid, default_context = "/obj") {
 }
 
 function displayNodeContext(cy, nodeName, nodeData) {
+    handleRenderAllButton(nodeData);
     generateContextButtons(cy, nodeName, nodeData.parent_icons);
     cy.add(nodeData.elements);
     cy.layout({ name: 'dagre' }).run()
+}
+
+function handleRenderAllButton(nodeData) {
+    const renderButton = document.querySelector('#renderAllBtn');
+    if (renderButton) {
+        if (nodeData.can_cook_all) {
+            renderButton.style.display = 'block';
+        } else {
+            renderButton.style.display = 'none';
+        }
+    }
+}
+
+function setupRenderAllButton() {
+    const renderButton = document.querySelector('#renderAllBtn');
+    if (renderButton) {
+        renderButton.addEventListener('click', function() {
+            const currentContext = nodeGraphManager.getLatestContext();
+            console.log(currentContext);
+        });
+    }
 }
 
 function setupDblClick(cy) {

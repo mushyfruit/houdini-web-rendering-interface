@@ -20,8 +20,8 @@ RUN mkdir /houdini && \
 FROM python:3.9-slim-buster as houdini-install
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends iputils-ping \ 
-        netcat-traditional ftp telnet procps libjemalloc2 hostname && \
+    apt-get install -y --no-install-recommends iputils-ping \
+        netcat-traditional ftp telnet procps libjemalloc2 hostname libgl1 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

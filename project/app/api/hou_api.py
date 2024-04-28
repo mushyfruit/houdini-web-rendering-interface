@@ -49,7 +49,8 @@ def process_hip_for_node_structure(root_node):
         "start": start,
         "end": end,
         "category": category_name,
-        "parent_icons": {}
+        "parent_icons": {},
+        "can_cook_all": _current_context_cookable(root_node),
     }
 
     icon_zip_path = hou.text.expandString(cnst.ICON_ZIP_PATH)
@@ -221,3 +222,11 @@ def is_node_cookable(node, parent_category_name):
     # Only OBJ and SOPs are supported ATM.
     error_msg = "Only OBJ and SOP context nodes are renderable."
     return False, error_msg
+
+
+def _current_context_cookable(context_node):
+    """Resolves if the node is a viable target for the 'Render Context' button.
+    """
+    if context_node.type().isManager():
+        return context_node.type().name() in {"objnet", "obj"}
+    return True
