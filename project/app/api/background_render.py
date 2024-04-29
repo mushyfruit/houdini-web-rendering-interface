@@ -26,9 +26,10 @@ def render_glb(render_data, hip_path):
         logging.error("Invalid node path passed. Unable to locate node.")
         return False
 
+    is_manager = render_node.type().isManager()
     render_path = node_path
     parent_path = None
-    if render_node.type().category() != hou.sopNodeTypeCategory():
+    if render_node.type().category() != hou.sopNodeTypeCategory() and not is_manager:
         if not render_node.renderNode():
             logging.error("No render node specified for {0}".format(node_path))
             return False
@@ -42,21 +43,7 @@ def render_glb(render_data, hip_path):
         out_node.setName(cnst.GLB_ROP)
 
     # Set up the GLTF ROP Node.
-    out_node.parm("trange").set("normal")
-    out_node.parm("usesoppath").set(True)
-    out_node.parm("soppath").set(render_path)
-
-    logging.info("Rendering to: {0}".format(glb_path))
-    out_node.parm('file').set(glb_path)
-
-    # Directly set, rather than passing `frame_range` in render call
-    # Useful to query "f2" to determine progress in callback.
-    frames = (render_data["start"], render_data["end"], render_data["step"])
-    for i in range(3):
-        index_str = str(i + 1)
-        f_parm = out_node.parm("f{0}".format(index_str))
-        f_parm.deleteAllKeyframes()
-        f_parm.set(frames[i])
+    prepare_gltf_rop(out_node, is_manager, render_data, render_path, glb_path)
 
     # TODO bake chop data?
 
@@ -83,13 +70,42 @@ def render_glb(render_data, hip_path):
         out_node.destroyCachedUserData("socket_id", must_exist=False)
 
 
+def prepare_gltf_rop(out_node, is_manager, render_data, render_path, glb_path):
+    if is_manager:
+        out_node.parm("usesoppath").set(False)
+        out_node.parm("soppath").set('')
+        out_node.parm("objpath").set(render_path)
+    else:
+        # Set up the GLTF ROP Node.
+        out_node.parm("usesoppath").set(True)
+        out_node.parm("soppath").set(render_path)
+        out_node.parm("objpath").set('')
+
+    logging.info("Rendering to: {0}".format(glb_path))
+    out_node.parm("trange").set("normal")
+    out_node.parm('file').set(glb_path)
+    out_node.parm('animationname').set("WebRenderDefault")
+
+    # Directly set, rather than passing `frame_range` in render call
+    # Useful to query "f2" to determine progress in callback.
+    frames = (render_data["start"], render_data["end"], render_data["step"])
+    for i in range(3):
+        index_str = str(i + 1)
+        f_parm = out_node.parm("f{0}".format(index_str))
+        f_parm.deleteAllKeyframes()
+        f_parm.set(frames[i])
+
+
 def update_progress(rop_node, render_event_type, time):
     # Update the correct loading bar with "data-node-name" attribute via `nodeName`.
     if render_event_type == hou.ropRenderEventType.PostFrame:
 
         render_node_path = rop_node.cachedUserData("parent_path")
         if render_node_path is None:
-            render_node_path = rop_node.parm("soppath").evalAsNode().path()
+            if rop_node.parm("usesoppath").eval():
+                render_node_path = rop_node.parm("soppath").evalAsNode().path()
+            else:
+                render_node_path = rop_node.parm("objpath").evalAsNode().path()
 
         end_frame = rop_node.parm("f2").evalAsFloat()
         progress = (hou.intFrame() / end_frame) * 100.0
@@ -127,15 +143,19 @@ def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path,
             "$HFS/houdini/pic/hdri/HDRIHaven_lenong_1_2k.rat")
 
     # Only render the specified node.
-    out_node.parm("candobjects").set(node_path)
-    out_node.parm("objects").set(node_path)
+    if hou.node(node_path).type().isManager():
+        out_node.parm("candobjects").set("{0}/*".format(node_path))
+    else:
+        out_node.parm("candobjects").set(node_path)
+        out_node.parm("objects").set(node_path)
+
     out_node.parm("picture").set(thumbnail_path)
 
     # Workaround for <= 19.5 hou versions:
     #     output_progress on Karma Node doesn't output ALF_PROGRESS
     #     Have to ensure -a/A flag is passed to husk command:
 
-    #out_node.parm("verbosity").set("a")
+    # out_node.parm("verbosity").set("a")
 
     # For >= 20.0 hou version
     out_node.parm("alfprogress").set(True)
@@ -168,14 +188,28 @@ def generate_thumbnail(render_data, hip_path):
 
     with RenderContextManager(render_obj):
         # Need a SOP node to calculate the OBJ's bbox.
-        if render_obj.type().category().name() == 'Sop':
-            sop_geo = render_obj.geometry().freeze()
-            render_obj = render_obj.parent()
+        if render_obj.type().isManager():
+            default_bbox = hou.BoundingBox()
+            for node in render_obj.children():
+                # Just take into account geometry object nodes.
+                # Not great, but covers most scenarios.
+                if node.type().name() == "geo":
+                    try:
+                        bbox = node.renderNode().geometry().boundingBox()
+                        bbox *= node.worldTransform()
+                        default_bbox.enlargeToContain(bbox)
+                    except AttributeError:
+                        continue
+            frame_selected_bbox(render_obj, out_camera, bbox=default_bbox)
         else:
-            sop_geo = render_obj.displayNode().geometry().freeze()
+            if render_obj.type().category().name() == 'Sop':
+                sop_geo = render_obj.geometry().freeze()
+                render_obj = render_obj.parent()
+            else:
+                sop_geo = render_obj.displayNode().geometry().freeze()
 
-        # UI is not available, can't use hou.GeometryViewport.frameSelected() :(
-        frame_selected_bbox(render_obj, out_camera, sop_geo)
+            # UI is not available, can't use hou.GeometryViewport.frameSelected() :(
+            frame_selected_bbox(render_obj, out_camera, sop_geo)
 
         thumbnail_path = render_data["thumbnail_path"]
         socket_id = render_data["socket_id"]
@@ -191,10 +225,31 @@ def generate_thumbnail(render_data, hip_path):
                                    socket_id=socket_id)
 
 
-def frame_selected_bbox(render_obj, camera, sop_geo):
+def frame_selected_bbox(render_obj, camera, sop_geo=None, bbox=None):
     # Calculates w/r/t SOP context.
-    bbox = sop_geo.boundingBox()
-    obj_origin = render_obj.origin()
+    if bbox is None:
+        bbox = sop_geo.boundingBox()
+
+    try:
+        obj_origin = render_obj.origin()
+    except AttributeError:
+        obj_origin = hou.Vector3(0, 0, 0)
+
+    # Scale up our bbox for a bit of padding.
+    scale_factor = 1.50
+    center = bbox.center()
+    new_size_x = (bbox.sizevec()[0] * scale_factor) / 2
+    new_size_y = (bbox.sizevec()[1] * scale_factor) / 2
+    new_size_z = (bbox.sizevec()[2] * scale_factor) / 2
+
+    # Set the new min and max vectors based on the scaled size
+    new_min = hou.Vector3(center[0] - new_size_x, center[1] - new_size_y, center[2] - new_size_z)
+    new_max = hou.Vector3(center[0] + new_size_x, center[1] + new_size_y, center[2] + new_size_z)
+
+    # Create a new bounding box with the enlarged size
+    enlarged_bbox = hou.BoundingBox(new_min[0], new_min[1], new_min[2], new_max[0], new_max[1], new_max[2])
+    bbox = enlarged_bbox
+
     bbox_center = bbox.center() + obj_origin
 
     adjust_height = hou.Vector3(bbox_center.x(), bbox_center.y(),
@@ -283,7 +338,12 @@ class RenderContextManager:
         object_category = self.render_obj.type().category()
         self.sop_context = object_category.name() == 'Sop'
 
+        self.is_manager = self.render_obj.type().isManager()
+
     def __enter__(self):
+        if self.is_manager:
+            return
+
         if self.sop_context:
             self.display_node = self.render_obj.parent().displayNode()
             self.render_node = self.render_obj.parent().renderNode()
@@ -294,6 +354,11 @@ class RenderContextManager:
         self.render_obj.setDisplayFlag(True)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        # If we're rendering a manager level context, no need to track
+        # and restore flag state.
+        if self.is_manager:
+            return
+
         if self.sop_context:
             self.display_node.setDisplayFlag(True)
             self.render_node.setRenderFlag(True)

@@ -706,10 +706,37 @@ label[for="start-frame"] {
     cursor: pointer;
 }
 
-#renderAllBtn {
+#global-holder {
     position: absolute;
     bottom: 10px;
     right: 10px;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end; /* Aligns children to the end of the container vertically */
+}
+
+#global-frame-input-container {
+    padding: 5px 8px;
+    border-radius: 0.6rem;
+    border: solid 2px transparent;
+    background-color: #007BFF;
+    background-image: linear-gradient(rgba(255, 255, 255, 0), rgba(255, 255, 255, 0)), linear-gradient(59deg, #6a7ba2, #445677);
+    background-origin: border-box;
+    background-clip: content-box, border-box;
+    box-shadow: 2px 1000px 1px rgba(22, 22, 22, 0.75) inset;
+    z-index: 1000;
+}
+
+#global-start-label {
+    padding-right: 5px;
+    text-transform: uppercase;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+}
+
+#renderAllBtn {
     padding: 10px 20px;
     font-size: 16px;
     color: #fff;

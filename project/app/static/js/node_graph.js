@@ -3,9 +3,6 @@ let poppers = {};
 const appState = {
     activeNode: null,
     socket: null,
-    defaultStart: null,
-    defaultEnd: null,
-    defaultStep: 1,
     sessionId: null
 }
 
@@ -16,7 +13,6 @@ class NodeState {
         this.has_cooked = false;
         this.startFrame = null;
         this.endFrame = null;
-        this.stepFrame = null;
     }
 }
 class NodeManager {
@@ -32,6 +28,47 @@ class NodeManager {
         // Poppers are ephemeral, so store the relevant data fields here.
         this.nodeStateCache = new Map();
         this.nodeViewCache = new Map();
+
+        this.fileDefaultStart = 1;
+        this.fileDefaultEnd = 240;
+        this.defaultStep = 1;
+
+        this.globalDefaultStart = null;
+        this.globalDefaultEnd = null;
+    }
+
+    setFileDefaultStart(startFrame) {
+        this.fileDefaultStart = startFrame;
+    }
+
+    setFileDefaultEnd(endFrame) {
+        this.fileDefaultEnd = endFrame;
+    }
+
+    setGlobalDefaultStart(startFrame) {
+        this.globalDefaultStart = startFrame;
+    }
+
+    setGlobalDefaultEnd(endFrame) {
+        this.globalDefaultEnd = endFrame;
+    }
+
+    getDefaultStart() {
+        // Allow for global override.
+        if (!this.globalDefaultStart) {
+            return this.fileDefaultStart;
+        } else {
+            return this.globalDefaultStart;
+        }
+    }
+
+    getDefaultEnd() {
+        // Allow for global override.
+        if (!this.globalDefaultEnd) {
+            return this.fileDefaultEnd;
+        } else {
+            return this.globalDefaultEnd;
+        }
     }
 
     addRender(nodePath, renderedFilename) {
@@ -162,8 +199,8 @@ function initNodeGraph(file_uuid, default_context = "/obj") {
 
     updateGraph(cy, default_context, file_uuid, false).then(nodeData => {
         // Store the default playback range upon initial load.
-        appState.defaultStart = nodeData.start
-        appState.defaultEnd = nodeData.end
+        nodeGraphManager.setFileDefaultStart(nodeData.start);
+        nodeGraphManager.setFileDefaultEnd(nodeData.end);
         if (!appState.sessionId && nodeData.session_id) {
             appState.sessionId = nodeData.session_id
         }
@@ -200,8 +237,26 @@ function setupRenderAllButton() {
     if (renderButton) {
         renderButton.addEventListener('click', function() {
             const currentContext = nodeGraphManager.getLatestContext();
-            console.log(currentContext);
+            handleContextSubmission(currentContext);
         });
+    }
+
+    const startFrame = document.querySelector('#global-start-frame');
+    const endFrame = document.querySelector('#global-end-frame');
+    if (startFrame && endFrame) {
+        startFrame.value = nodeGraphManager.getDefaultStart()
+        endFrame.value = nodeGraphManager.getDefaultEnd();
+
+        startFrame.addEventListener('change', function(e) {
+            const newValue = parseInt(e.target.value, 10);
+            nodeGraphManager.setGlobalDefaultStart(newValue);
+        })
+
+        endFrame.addEventListener('change', function(e) {
+            const newValue = parseInt(e.target.value, 10);
+            nodeGraphManager.setGlobalDefaultEnd(newValue);
+        })
+
     }
 }
 
@@ -393,9 +448,8 @@ function buildPopperDiv(node) {
     const nodeName = node.data('id');
     const nodeLastCooked = nodeCache?.lastCooked ?? node.data('cooktime');
 
-    const nodeStartFrame = nodeCache?.startFrame ?? appState.defaultStart;
-    const nodeEndFrame = nodeCache?.endFrame ?? appState.defaultEnd;
-    const nodeStepFrame = nodeCache?.stepFrame ?? appState.defaultStep;
+    const nodeStartFrame = nodeCache?.startFrame ?? nodeGraphManager.getDefaultStart();
+    const nodeEndFrame = nodeCache?.endFrame ?? nodeGraphManager.getDefaultEnd();
     const thumbnailSource = nodeCache?.thumbnail ?? ""
     const thumbnailDisplay = thumbnailSource ? "display: block;" : "display: none;";
 
@@ -428,10 +482,7 @@ function buildPopperDiv(node) {
                 <div id="frame-input-container">
                     <label for="start-frame">Start/End/Inc</label>
                     <input type="number" id="start-frame" name="startFrame" min="1" class="frame-input" value="${nodeStartFrame}">
-
                     <input type="number" id="end-frame" name="endFrame" min="2" class="frame-input" value="${nodeEndFrame}">
-
-                    <input type="number" id="step-frame" name="stepFrame" min="1" class="frame-input" value="${nodeStepFrame}">
                 </div>
                 <div id="render-button-container">
                     <button id="submitRender" class="render-btn">Submit</button>
@@ -583,23 +634,25 @@ function handleRenderFinish(data) {
 function startRenderTask(node) {
     const startFrameInput = document.getElementById('start-frame');
     const endFrameInput = document.getElementById('end-frame');
-    const stepFrameInput = document.getElementById('step-frame');
 
     const start = parseInt(startFrameInput.value, 10);
     const end = parseInt(endFrameInput.value, 10);
-    const step = parseInt(stepFrameInput.value, 10);
 
     // Validate render settings here:
-    if (!validateSubmission(start, end, step)) {
+    if (!validateSubmission(start, end)) {
         return;
     }
 
     const nodePath = node.data('path');
 
     // Emit the render task event.
-    appState.socket.timeout(5000).emit(
+    submitRenderTask(start, end, nodePath);
+}
+
+function submitRenderTask(start, end, nodePath) {
+     appState.socket.timeout(5000).emit(
         'submit_render_task',
-        { 'start': start, 'end': end, 'step': step, 'path': nodePath, 'file': nodeGraphManager.getLatestUUID() },
+        { 'start': start, 'end': end, 'step': 1, 'path': nodePath, 'file': nodeGraphManager.getLatestUUID() },
         (err, response) => {
             if (err) {
                 // Server doesn't acknowledge event within timeout.
@@ -627,14 +680,9 @@ function startRenderTask(node) {
 }
 
 
-function validateSubmission(start, end, step) {
+function validateSubmission(start, end) {
     if (start >= end) {
         console.error("Start frame must be less than end frame.");
-        return false;
-    }
-
-    if (step <= 0) {
-        console.error("Step must be greater than 0.");
         return false;
     }
 
@@ -647,9 +695,26 @@ function validateSubmission(start, end, step) {
 }
 
 
+function handleContextSubmission(currentContext) {
+    initSocket();
+    startContextRenderTask(currentContext);
+}
+
 function handleSubmit(node) {
     initSocket();
     startRenderTask(node);
+}
+
+function startContextRenderTask(currentContext) {
+    const start = nodeGraphManager.getDefaultStart();
+    const end = nodeGraphManager.getDefaultEnd();
+
+    // Validate render settings here:
+    if (!validateSubmission(start, end)) {
+        return;
+    }
+
+    submitRenderTask(start, end, currentContext);
 }
 
 function getCurrentFormattedTime() {

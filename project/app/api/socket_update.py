@@ -46,10 +46,6 @@ def receive_render_task(render_data):
         error_message = str(e)
         return {"message": error_message, "success": False}
 
-    session.setdefault('rendered_filenames', {})[render_id] = glb_path
-    # Ensure the nested dict is maintained in session obj.
-    session.modified = True
-
     # SocketIO will handle the serialization to JSON.
     return {
         "message": "Submission succeeded.",
