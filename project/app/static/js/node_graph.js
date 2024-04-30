@@ -218,18 +218,26 @@ function initNodeGraph(file_uuid, default_context = "/obj") {
 
 function displayNodeContext(cy, nodeName, nodeData) {
     handleRenderAllButton(nodeData);
+    handleGlobalCookingBar(nodeName);
     generateContextButtons(cy, nodeName, nodeData.parent_icons);
     cy.add(nodeData.elements);
     cy.layout({ name: 'dagre' }).run()
 }
 
+function handleGlobalCookingBar(nodeName) {
+    const globalCooking = document.querySelector('.global-cooking-bar')
+    if (globalCooking) {
+        globalCooking.setAttribute('data-node-path', nodeName);
+    }
+}
+
 function handleRenderAllButton(nodeData) {
-    const renderButton = document.querySelector('#renderAllBtn');
-    if (renderButton) {
+    const globalSettingsHolder = document.querySelector('.globalRender');
+    if (globalSettingsHolder) {
         if (nodeData.can_cook_all) {
-            renderButton.style.display = 'block';
+            globalSettingsHolder.style.display = 'block';
         } else {
-            renderButton.style.display = 'none';
+            globalSettingsHolder.style.display = 'none';
         }
     }
 }
@@ -238,6 +246,10 @@ function setupRenderAllButton() {
     const renderButton = document.querySelector('#renderAllBtn');
     if (renderButton) {
         renderButton.addEventListener('click', function() {
+            const globalCookingBar = document.querySelector(".global-cooking-bar")
+            if (globalCookingBar) {
+                globalCookingBar.style.width = '0%';
+            }
             const currentContext = nodeGraphManager.getLatestContext();
             handleContextSubmission(currentContext);
         });

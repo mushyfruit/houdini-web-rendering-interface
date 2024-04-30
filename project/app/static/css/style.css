@@ -590,13 +590,17 @@ label[for="start-frame"] {
     margin-bottom: 1px;
 }
 
-#cooking-bar{
+#cooking-bar {
     /* Animated by the render callback */
     width: 0%;
     height: 6px;
     overflow: hidden;
     border-radius: 5px;
     background-color: white;
+}
+
+#cooking-bar.global-cooking-bar {
+    height: 4px;
 }
 
 #cooking-status {
@@ -715,7 +719,7 @@ label[for="start-frame"] {
     justify-content: flex-end;
 }
 
-#global-frame-input-container {
+#global-frame-info-holder {
     padding: 5px 8px;
     border-radius: 0.6rem;
     border: solid 2px transparent;
@@ -725,6 +729,10 @@ label[for="start-frame"] {
     background-clip: content-box, border-box;
     box-shadow: 2px 1000px 1px rgba(22, 22, 22, 0.75) inset;
     z-index: 1000;
+}
+
+#global-frame-input-container {
+    padding-bottom: 6px;
 }
 
 #global-start-label {

@@ -9,10 +9,13 @@
     </div>
     <div class="globalRender">
         <div id="global-holder">
-            <div id="global-frame-input-container">
-                <label id="global-start-label" for="global-start-frame">Frame Range</label>
-                <input type="number" id="global-start-frame" name="startFrame" min="1" class="frame-input">
-                <input type="number" id="global-end-frame" name="endFrame" min="1" class="frame-input" >
+            <div id="global-frame-info-holder">
+                <div id="global-frame-input-container">
+                    <label id="global-start-label" for="global-start-frame">Frame Range</label>
+                    <input type="number" id="global-start-frame" name="startFrame" min="1" class="frame-input">
+                    <input type="number" id="global-end-frame" name="endFrame" min="1" class="frame-input" >
+                </div>
+                <div class="global-cooking-bar" id="cooking-bar"></div>
             </div>
             <button id="renderAllBtn">Render Context</button>
         </div>
