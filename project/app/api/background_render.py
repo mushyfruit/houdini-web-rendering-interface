@@ -63,6 +63,7 @@ def render_glb(render_data, hip_path):
                                    glb_path,
                                    cnst.BackgroundRenderType.glb_file,
                                    render_data["file_uuid"],
+                                   (render_data["start"], render_data["end"]),
                                    socket_id=render_data["socket_id"])
     finally:
         out_node.removeRenderEventCallback(update_progress)
@@ -222,6 +223,7 @@ def generate_thumbnail(render_data, hip_path):
                                    thumbnail_path,
                                    cnst.BackgroundRenderType.thumbnail,
                                    render_data["file_uuid"],
+                                   None,
                                    socket_id=socket_id)
 
 
@@ -298,6 +300,7 @@ def on_completion_notification(node_path,
                                render_path,
                                render_type,
                                file_uuid,
+                               frames,
                                socket_id=None):
     if socket_id is None:
         completed_render_node = hou.node(node_path)
@@ -313,7 +316,8 @@ def on_completion_notification(node_path,
         "render_file_path": render_path,
         "render_node_path": node_path,
         "render_type": render_type,
-        "socket_id": socket_id
+        "socket_id": socket_id,
+        "frame_info": frames
     }
 
     render_update_json = json.dumps(render_completion_data)

@@ -710,10 +710,9 @@ label[for="start-frame"] {
     position: absolute;
     bottom: 10px;
     right: 10px;
-
     display: flex;
     flex-direction: column;
-    justify-content: flex-end; /* Aligns children to the end of the container vertically */
+    justify-content: flex-end;
 }
 
 #global-frame-input-container {

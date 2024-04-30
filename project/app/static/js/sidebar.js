@@ -170,29 +170,15 @@ function onNodeGraphExit() {
     deletePoppers();
 }
 
-function handleDisplayModel(render=null) {
-    // Remove any lingering popper elements.
+function handleDisplayModel(renderFilename = null) {
     onNodeGraphExit();
-
-    // Restart the render loop and unhide the render canvas.
     showRenderCanvas();
-
-    // Reset the main-body element to clear up space for renderCanvas.
     document.querySelector('.main-body').innerHTML = '';
 
-    // Grab the latest render.
-    if (!render) {
-        latest_filename = nodeGraphManager.getLatestRender();
-    } else {
-        latest_filename = render
-    }
-
-    if (latest_filename) {
-        loadModel(latest_filename);
-    } else {
-        // Fallback to a default model?
-        loadModel("placeholder.glb");
-    }
+    const fileToLoad = renderFilename || nodeGraphManager.getLatestRender() || "placeholder.glb";
+    const fileMetaData = nodeGraphManager.getRender(fileToLoad);
+    const frameRange = fileMetaData ? fileMetaData["frameRange"] : [1, 240];
+    loadModel(fileToLoad, frameRange);
 }
 
 function setupSidebar() {

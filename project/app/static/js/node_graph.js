@@ -17,7 +17,7 @@ class NodeState {
 }
 class NodeManager {
     constructor() {
-        this.renders = new Map();
+        this.renders = {};
         this.latestFilename = null;
 
         // Track the context and file UUID
@@ -31,7 +31,6 @@ class NodeManager {
 
         this.fileDefaultStart = 1;
         this.fileDefaultEnd = 240;
-        this.defaultStep = 1;
 
         this.globalDefaultStart = null;
         this.globalDefaultEnd = null;
@@ -71,8 +70,11 @@ class NodeManager {
         }
     }
 
-    addRender(nodePath, renderedFilename) {
-        this.renders.set(nodePath, renderedFilename)
+    addRender(renderedFilename, nodePath, frameRange) {
+        this.renders[renderedFilename] = {
+            "nodePath": nodePath,
+            "frameRange": frameRange
+        }
         this.latestFilename = renderedFilename;
     }
 
@@ -116,8 +118,8 @@ class NodeManager {
         return this.nodeStateCache.get(nodePath);
     }
 
-    getRender(nodePath) {
-        return this.renders.get(nodePath);
+    getRender(fileName) {
+        return this.renders[fileName]
     }
 
     getLatestRender() {
@@ -619,14 +621,15 @@ function updateStoredModelEntry(data) {
     const thumbCard = fileContainer.querySelector(`.thumb-card[data-node-path="${data.nodePath}"]`);
 
     if (loadingAnimation && thumbCard) {
-        const img = createThumbnail(data.fileName, data.nodePath, data.hipFile);
+        const glb_path = loadingAnimation.getAttribute('glb-path');
+        const img = createThumbnail(data.fileName, data.nodePath, data.hipFile, glb_path);
         loadingAnimation.parentNode.replaceChild(img, loadingAnimation);
     }
 }
 
 
 function handleRenderFinish(data) {
-    nodeGraphManager.addRender(data.nodePath, data.fileName);
+    nodeGraphManager.addRender(data.fileName, data.nodePath, data.frameRange);
     nodeGraphManager.updateNodeStateCache(data.nodePath, "has_cooked", true);
     handlePostRender(data.nodePath);
 }

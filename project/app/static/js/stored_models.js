@@ -98,9 +98,6 @@ function populateFiles(files) {
         return;
     }
 
-    const cachedMetadata = localStorage.getItem("stored-model-metadata");
-    const metadata = cachedMetadata ? JSON.parse(cachedMetadata) : {};
-
     const container = document.getElementById('models-container');
     container.innerHTML = '';
 
@@ -134,12 +131,13 @@ function populateFiles(files) {
 
                 let thumbUrl = '';
                 if (file.thumb && file.thumb[key]) {
-                    const img = createThumbnail(file.thumb[key], key, file.original_filename);
+                    const img = createThumbnail(file.thumb[key], key, file.original_filename, value);
                     thumbCard.appendChild(img);
                 } else {
                     const loadingHolder = document.createElement('div');
                     loadingHolder.className = 'animation-holder';
                     loadingHolder.setAttribute('data-node-path', key);
+                    loadingHolder.setAttribute('glb-path', value);
 
                     const loadingIndicator = document.createElement('div');
                     loadingIndicator.className = 'loader_animation';
@@ -157,8 +155,8 @@ function populateFiles(files) {
                 cardTitle.innerText = key;
 
                 const cardText = document.createElement('p');
-                if (file.cook_data && file.cook_data[key]) {
-                    const utcTimeString = file.cook_data[key];
+                if (file.render_time && file.render_time[key]) {
+                    const utcTimeString = file.render_time[key];
                     // Python datetime doesn't support 'Z' suffix, add it here.
                     const date = new Date(utcTimeString + (utcTimeString.endsWith('Z') ? '' : 'Z'));
 
@@ -174,22 +172,32 @@ function populateFiles(files) {
                     cardText.innerText = '';
                 }
 
+                const frameRangeInfo = document.createElement('p');
+                if (file.frame_range && file.frame_range[key]) {
+                    let frameRangeParts = file.frame_range[key].split('-');
+
+                    let frameRangeDisplay;
+                    if (frameRangeParts.length == 2) {
+                        frameRangeDisplay = `<b>Frame Range:</b> ${frameRangeParts[0]} to ${frameRangeParts[1]}`;
+                    } else if (frameRangeParts.length == 1) {
+                        frameRangeDisplay = `<b>Frame:</b> ${frameRangeParts[0]}`;
+                    } else {
+                        frameRangeDisplay = `<b>Unknown Frame Data:</b> ${frameRangeString}`;
+                    }
+                    frameRangeInfo.innerHTML = frameRangeDisplay;
+                } else {
+                    frameRangeInfo.innerHTML = '';
+                }
+
                 cardBody.appendChild(cardTitle);
                 cardBody.appendChild(cardText);
+                cardBody.appendChild(frameRangeInfo);
                 thumbCard.appendChild(cardBody);
                 contentDiv.appendChild(thumbCard);
 
                 window.requestAnimationFrame(() => {
                     adjustCardTitleToContainer(cardTitle);
                 });
-
-                metadata[`${fileName}-${key}`] = {
-                    imgUrl: thumbUrl,
-                    title: key,
-                    text: "Lorem ipsum",
-                    glb: file.glb[key]
-                };
-
             });
         }
 
@@ -197,8 +205,6 @@ function populateFiles(files) {
         infoDiv.className = 'stored-model-info'
         contentDiv.appendChild(infoDiv);
     });
-
-    localStorage.setItem("stored-model-metadata", JSON.stringify(metadata));
 }
 
 function adjustCardTitleToContainer(cardTitle) {
@@ -219,7 +225,7 @@ function adjustCardTitleToContainer(cardTitle) {
 }
 
 
-function createThumbnail(thumb_name, nodePath, filePath) {
+function createThumbnail(thumb_name, nodePath, filePath, glbPath) {
     thumbUrl = `/get_thumbnail/${thumb_name}`;
 
     const img = document.createElement('img');
@@ -227,20 +233,18 @@ function createThumbnail(thumb_name, nodePath, filePath) {
     img.className = 'model-img'
     img.setAttribute('data-node-path', nodePath);
     img.setAttribute('data-file-path', filePath || "Unnamed File");
+    img.setAttribute('data-glb-path', glbPath);
     img.style.display = 'block';
 
     img.addEventListener('click', function() {
-        const nodePath = this.dataset.nodePath;
-        const filePath = this.dataset.filePath;
+        const glbPath = this.dataset.glbPath;
 
-        const cachedMetadata = localStorage.getItem("stored-model-metadata");
-        const metadata = cachedMetadata ? JSON.parse(cachedMetadata) : {};
-
-        const data = metadata[`${filePath}-${nodePath}`];
-        if (data) {
-            handleDisplayModel(data.glb);
-            nodeGraphManager.updateLatestRender(data.glb);
+        if (glbPath) {
+            handleDisplayModel(glbPath);
+            nodeGraphManager.updateLatestRender(glbPath);
         } else {
+            const nodePath = this.dataset.nodePath;
+            const filePath = this.dataset.filePath;
             console.error(`${filePath}-${nodePath}`)
             console.error("Unable to locate entry.")
         }

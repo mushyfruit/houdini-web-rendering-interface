@@ -98,13 +98,14 @@ def retrieve_uuid_from_filename(redis_conn, user_uuid, file_hash):
 
 
 @with_redis_conn
-def store_render_data(redis_conn, render_type, hip_file_uuid, filename, node_path):
+def store_render_data(redis_conn, render_type, hip_file_uuid, filename, node_path, frame_range):
     redis_conn.hset(f"file_render_data:{hip_file_uuid}:{render_type}", node_path, filename)
 
     # Store latest render time for GLB file exports.
     if render_type == cnst.BackgroundRenderType.glb_file:
         render_time = datetime.datetime.utcnow()
         redis_conn.hset(f"file_render_data:{hip_file_uuid}:render_time", node_path, render_time.isoformat())
+        redis_conn.hset(f"file_render_data:{hip_file_uuid}:frame_range", node_path, frame_range)
 
 
 @with_redis_conn
@@ -125,15 +126,17 @@ def get_user_uploaded_file_dicts(redis_conn, user_uuid):
     if file_info_list:
         for file_dict in file_info_list:
             file_uuid = file_dict["file_uuid"]
-            render_data = redis_conn.hgetall(f"file_render_data:{file_uuid}:{cnst.BackgroundRenderType.glb_file}")
-            thumb_data = redis_conn.hgetall(f"file_render_data:{file_uuid}:{cnst.BackgroundRenderType.thumbnail}")
-            cook_data = redis_conn.hgetall(f"file_render_data:{file_uuid}:render_time")
-            if render_data:
-                file_dict[cnst.BackgroundRenderType.glb_file] = decode_redis_hash(render_data)
-            if thumb_data:
-                file_dict[cnst.BackgroundRenderType.thumbnail] = decode_redis_hash(thumb_data)
-            if cook_data:
-                file_dict["cook_data"] = decode_redis_hash(cook_data)
+            render_keys = [
+                cnst.BackgroundRenderType.glb_file,
+                cnst.BackgroundRenderType.thumbnail,
+                'render_time',
+                'frame_range'
+            ]
+
+            for key in render_keys:
+                data = redis_conn.hgetall(f"file_render_data:{file_uuid}:{key}")
+                if data:
+                    file_dict[key] = decode_redis_hash(data)
 
     return file_info_list
 

@@ -116,7 +116,7 @@ function onInit() {
     });
 
     startRenderLoop();
-    loadModel("placeholder.glb");
+    loadModel("placeholder.glb", [1, 240]);
 }
 
 // Start and stop the render loop for performance.
@@ -131,7 +131,7 @@ function startRenderLoop() {
 }
 
 // Handle loading and clearing models.
-function loadModel(fileName) {
+function loadModel(fileName, frameRange) {
     clearModels();
 
     BABYLON.SceneLoader.ImportMeshAsync(null, "/get_glb/", fileName, scene).then(result => {
@@ -150,7 +150,7 @@ function loadModel(fileName) {
               ),
             );
 
-        scene.beginAnimation(scene, 0, 100, true);
+        scene.beginAnimation(scene, frameRange[0], frameRange[1], true);
 
         });
     }).catch(error => {

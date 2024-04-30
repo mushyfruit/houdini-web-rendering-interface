@@ -100,7 +100,7 @@ def handle_render_completion(message_data):
 
     required_keys = {
         'file_uuid', 'render_type', 'render_node_path',
-        'render_file_path', 'socket_id'
+        'render_file_path', 'socket_id', 'frame_info',
     }
     if not validate_required_keys(render_completion_data, required_keys):
         return
@@ -116,10 +116,16 @@ def handle_render_completion(message_data):
 
     filename = render_completion_data["render_file_path"].split(os.sep)[-1]
 
+    formatted_frame_string = None
+    if render_type == cnst.BackgroundRenderType.glb_file:
+        frames = render_completion_data["frame_info"]
+        formatted_frame_string = "{0}-{1}".format(frames[0], frames[1])
+
     redis_client.store_render_data(render_type,
                                    render_completion_data["file_uuid"],
                                    filename,
-                                   render_completion_data["render_node_path"])
+                                   render_completion_data["render_node_path"],
+                                   formatted_frame_string)
 
     # TODO
     print({
@@ -127,12 +133,17 @@ def handle_render_completion(message_data):
         'fileName': filename,
         'nodePath': render_completion_data["render_node_path"]
     })
-    socketio.emit(channel, {
+
+    render_completion_dict = {
         'hipFile': render_completion_data["file_uuid"],
         'fileName': filename,
-        'nodePath': render_completion_data["render_node_path"]
-    },
-                  room=render_completion_data["socket_id"])
+        'nodePath': render_completion_data["render_node_path"],
+    }
+
+    if render_type == cnst.BackgroundRenderType.glb_file:
+        render_completion_dict["frameRange"] = render_completion_data["frame_info"]
+
+    socketio.emit(channel, render_completion_dict, room=render_completion_data["socket_id"])
 
 
 def handle_glb_progress_update(message_data):
