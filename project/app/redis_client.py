@@ -25,7 +25,7 @@ class RedisClient:
                                                db=0)
 
             # Flush the DB for testing purposes.
-            # cls._client_instance.flushdb()
+            cls._client_instance.flushdb()
 
         return cls._client_instance
 

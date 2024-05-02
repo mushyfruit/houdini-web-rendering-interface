@@ -41,7 +41,17 @@ def render_glb(render_data, hip_path):
     # Set up the GLTF ROP Node.
     prepare_gltf_rop(out_node, is_manager, render_data, render_path, glb_path)
 
-    # TODO bake chop data?
+    # Bake any CHOP data on object level transforms
+    if render_node.type().isManager():
+        for node in render_node.children():
+            bake_object_transforms(node, render_data)
+    else:
+        bake_object_transforms(render_node, render_data)
+
+
+    # Object-level transforms when overridden by CHOP track, will not be processed.
+    # Bake them here to ensure the transform information is passed to GLTF ROP.
+    bake_object_transforms(render_node, render_data)
 
     # Store the redis socket ID for retrieval in callback.
     out_node.setCachedUserData("socket_id", render_data["socket_id"])
@@ -65,6 +75,32 @@ def render_glb(render_data, hip_path):
         out_node.removeRenderEventCallback(update_progress)
         out_node.destroyCachedUserData("parent_path", must_exist=False)
         out_node.destroyCachedUserData("socket_id", must_exist=False)
+
+
+def bake_object_transforms(node, render_data):
+    rotation_parm = node.parmTuple("r")
+    translate_parm = node.parmTuple("t")
+    scale_parm = node.parmTuple("s")
+
+    # Object-level transforms when overridden by CHOP track, will not be processed.
+    # Bake them here to ensure the transform information is passed to GLTF ROP.
+    for parmTuple in (rotation_parm, translate_parm, scale_parm):
+        if parmTuple is None:
+            continue
+
+        for parm in parmTuple:
+            if parm.isOverrideTrackActive():
+                logging.info("Refitting {0}".format(parm.alias()))
+                parm.keyframesRefit(
+                    False,
+                    0, 1, 1,
+                    True,  # Resample operation prior to refitting.
+                    1.0,  # Resample rate (1.0 = keyframe per frame)
+                    0,  # Resample tolerance in frames.
+                    True,  # Use a supplied range for baking.
+                    render_data["start"], render_data["end"],
+                    hou.parmBakeChop.KeepExportFlag  # Keep CHOP export flag, but baked animation is present.
+                )
 
 
 def prepare_gltf_rop(out_node, is_manager, render_data, render_path, glb_path):
