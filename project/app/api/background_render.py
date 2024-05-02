@@ -24,14 +24,10 @@ def render_glb(render_data, hip_path):
 
     is_manager = render_node.type().isManager()
     render_path = node_path
-    parent_path = None
     if render_node.type().category() != hou.sopNodeTypeCategory() and not is_manager:
         if not render_node.renderNode():
             logging.error("No render node specified for {0}".format(node_path))
             return False
-        else:
-            parent_path = render_node.path()
-            render_path = render_node.renderNode().path()
 
     out_node = hou.node("/out/{0}".format(cnst.GLB_ROP))
     if out_node is None:
@@ -39,7 +35,8 @@ def render_glb(render_data, hip_path):
         out_node.setName(cnst.GLB_ROP)
 
     # Set up the GLTF ROP Node.
-    prepare_gltf_rop(out_node, is_manager, render_data, render_path, glb_path)
+    category = render_node.type().category()
+    prepare_gltf_rop(out_node, category, is_manager, render_data, render_path, glb_path)
 
     # Bake any CHOP data on object level transforms
     if render_node.type().isManager():
@@ -48,15 +45,12 @@ def render_glb(render_data, hip_path):
     else:
         bake_object_transforms(render_node, render_data)
 
-
     # Object-level transforms when overridden by CHOP track, will not be processed.
     # Bake them here to ensure the transform information is passed to GLTF ROP.
     bake_object_transforms(render_node, render_data)
 
     # Store the redis socket ID for retrieval in callback.
     out_node.setCachedUserData("socket_id", render_data["socket_id"])
-    if parent_path is not None:
-        out_node.setCachedUserData("parent_path", parent_path)
 
     out_node.addRenderEventCallback(update_progress)
 
@@ -90,7 +84,6 @@ def bake_object_transforms(node, render_data):
 
         for parm in parmTuple:
             if parm.isOverrideTrackActive():
-                logging.info("Refitting {0}".format(parm.alias()))
                 parm.keyframesRefit(
                     False,
                     0, 1, 1,
@@ -103,8 +96,8 @@ def bake_object_transforms(node, render_data):
                 )
 
 
-def prepare_gltf_rop(out_node, is_manager, render_data, render_path, glb_path):
-    if is_manager:
+def prepare_gltf_rop(out_node, category, is_manager, render_data, render_path, glb_path):
+    if is_manager or category == hou.objNodeTypeCategory():
         out_node.parm("usesoppath").set(False)
         out_node.parm("soppath").set('')
         out_node.parm("objpath").set(render_path)
@@ -133,12 +126,10 @@ def update_progress(rop_node, render_event_type, time):
     # Update the correct loading bar with "data-node-name" attribute via `nodeName`.
     if render_event_type == hou.ropRenderEventType.PostFrame:
 
-        render_node_path = rop_node.cachedUserData("parent_path")
-        if render_node_path is None:
-            if rop_node.parm("usesoppath").eval():
-                render_node_path = rop_node.parm("soppath").evalAsNode().path()
-            else:
-                render_node_path = rop_node.parm("objpath").evalAsNode().path()
+        if rop_node.parm("usesoppath").eval():
+            render_node_path = rop_node.parm("soppath").evalAsNode().path()
+        else:
+            render_node_path = rop_node.parm("objpath").evalAsNode().path()
 
         end_frame = rop_node.parm("f2").evalAsFloat()
         progress = (hou.intFrame() / end_frame) * 100.0
