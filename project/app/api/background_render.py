@@ -9,11 +9,7 @@ from app import redis_client, constants as cnst
 
 
 def render_glb(render_data, hip_path):
-    try:
-        hou.hipFile.load(hip_path)
-    except hou.LoadWarning as e:
-        logging.error(e.instanceMessage())
-        return None
+    hou.hipFile.load(hip_path, suppress_save_prompt=True, ignore_load_warnings=True)
 
     node_path = render_data["node_path"]
     glb_path = render_data["glb_path"]
@@ -173,7 +169,10 @@ def generate_thumbnail(render_data, hip_path):
 
     Instead, render via Karma CPU in separate celery Task.
     """
-    hou.hipFile.load(hip_path)
+    # Suppress hou.LoadWarning exceptions.
+    hou.hipFile.load(
+        hip_path, suppress_save_prompt=True, ignore_load_warnings=True)
+
     # Create and position a camera
     out_camera = hou.node("/obj/{0}".format(cnst.THUMBNAIL_CAM))
     if not out_camera:
