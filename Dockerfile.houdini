@@ -51,6 +51,3 @@ ENV SIDEFX_CLIENT=$SIDEFX_CLIENT SIDEFX_SECRET=$SIDEFX_SECRET HFS_TARGET=$HFS_VE
 
 ENV LD_PRELOAD="/opt/houdini/build/dsolib/libjemalloc.so" 
 WORKDIR /root/hou_webserver
-
-# Placeholder to keep container alive.
-CMD tail -f /dev/null

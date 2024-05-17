@@ -1,28 +1,22 @@
 {
-  "name": "houdini-webapp",
+  "private": true,
   "version": "1.0.0",
-  "description": "Houdini Web-Rendering App.",
-  "scripts": {
-    "build": "webpack --mode production --progress --config webpack.config.js",
-    "dev-build": "webpack --progress --mode development --config webpack.config.js",
-    "watch": "webpack --progress --mode development --config webpack.config.js --watch"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/mushyfruit/houdini-web-rendering-interface.git"
-  },
-  "keywords": [
-    "houdini",
-    "web-rendering"
-  ],
-  "author": "mushyfruit",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/mushyfruit/houdini-web-rendering-interface/issues"
-  },
-  "homepage": "https://github.com/mushyfruit/houdini-web-rendering-interface#readme",
-  "devDependencies": {
-    "webpack": "^5.90.1",
-    "webpack-cli": "^5.1.4"
+  "description": "Preview glTF models directly from an uploaded hip file using Babylon.js",
+  "author": "Mushy Fruit",
+  "license": "MIT",
+  "scripts": {},
+  "dependencies": {
+    "@babylonjs/core": "^7.7.0",
+    "@babylonjs/loaders": "^7.7.0",
+    "@phosphor-icons/web": "^2.1.1",
+    "@popperjs/core": "^2.11.8",
+    "bootstrap": "^5.3.3",
+    "cytoscape": "^3.29.2",
+    "cytoscape-dagre": "^2.5.0",
+    "cytoscape-popper": "^4.0.0",
+    "dagre": "^0.8.5",
+    "socket.io-client": "^4.7.5",
+    "tweakpane": "^4.0.3",
+    "vite": "^5.2.11"
   }
 }

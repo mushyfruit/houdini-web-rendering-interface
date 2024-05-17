@@ -1,3 +1,5 @@
+import { onNodeGraphExit, hideRenderCanvas, handleDisplayModel } from './sidebar'
+import { nodeGraphManager } from './node_graph'
 
 function initializeStoredModels(storedModels) {
     const defaultWidth = '256px';
@@ -12,7 +14,7 @@ function initializeStoredModels(storedModels) {
 }
 
 
-function handleStoredModelsToggle(storedModels, sidebar, toggled_button) {
+export function handleStoredModelsToggle(storedModels, sidebar, toggled_button) {
 
     // Set transition based on sidebar's current transition time.
     const style = window.getComputedStyle(sidebar);
@@ -41,7 +43,7 @@ function handleStoredModelsToggle(storedModels, sidebar, toggled_button) {
     document.documentElement.style.setProperty('--dynamic-margin-left', finalValue);
 }
 
-async function handleStoredModels() {
+export async function handleStoredModels() {
     onNodeGraphExit();
 
     var canvas = document.getElementById('renderCanvas');
@@ -226,7 +228,7 @@ function adjustCardTitleToContainer(cardTitle) {
 
 
 function createThumbnail(thumb_name, nodePath, filePath, glbPath) {
-    thumbUrl = `/get_thumbnail/${thumb_name}`;
+    const thumbUrl = `/get_thumbnail/${thumb_name}`;
 
     const img = document.createElement('img');
     img.src = thumbUrl;

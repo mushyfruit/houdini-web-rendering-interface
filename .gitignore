@@ -16,6 +16,9 @@ instance/
 # NPM
 node_modules/
 
+# Vite
+dist
+
 # Environments
 .idea/
 .env

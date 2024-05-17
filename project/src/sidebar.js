@@ -1,3 +1,7 @@
+import * as modelDisplay from './model_display';
+import { nodeGraphManager, initNodeGraph, deletePoppers } from './node_graph';
+import { handleStoredModels, handleStoredModelsToggle } from './stored_models'
+
 document.addEventListener('DOMContentLoaded', (event) => {
     getUserID();
     connectFileInput();
@@ -64,13 +68,13 @@ async function connectHIP() {
     })
 }
 
-function hideRenderCanvas() {
+export function hideRenderCanvas() {
     var canvas = document.getElementById('renderCanvas');
     if (canvas) {
         canvas.style.zIndex = -1;
         canvas.style.display = 'none';
     }
-    stopRenderLoop();
+    modelDisplay.stopRenderLoop();
 }
 
 function showRenderCanvas() {
@@ -78,7 +82,7 @@ function showRenderCanvas() {
     if (canvas && canvas.style.display === 'none') {
         canvas.style.display = 'block';
         canvas.style.zIndex = 1;
-        startRenderLoop();
+        modelDisplay.startRenderLoop();
     }
 }
 
@@ -161,7 +165,7 @@ async function handleNodeGraph() {
     }
 }
 
-function onNodeGraphExit() {
+export function onNodeGraphExit() {
     let cy = document.getElementById('cy');
     if (cy) {
         const oldContext = nodeGraphManager.getLatestContext();
@@ -170,7 +174,7 @@ function onNodeGraphExit() {
     deletePoppers();
 }
 
-function handleDisplayModel(renderFilename = null) {
+export function handleDisplayModel(renderFilename = null) {
     onNodeGraphExit();
     showRenderCanvas();
     document.querySelector('.main-body').innerHTML = '';
@@ -178,7 +182,7 @@ function handleDisplayModel(renderFilename = null) {
     const fileToLoad = renderFilename || nodeGraphManager.getLatestRender() || "placeholder.glb";
     const fileMetaData = nodeGraphManager.getRender(fileToLoad);
     const frameRange = fileMetaData ? fileMetaData["frameRange"] : [1, 240];
-    loadModel(fileToLoad, frameRange);
+    modelDisplay.loadModel(fileToLoad, frameRange);
 }
 
 function setupSidebar() {
@@ -304,5 +308,5 @@ function removeClassFromElements(elements, className) {
 }
 
 function toggleClass(element, className) {
-    toggled = element.classList.toggle(className);
+    element.classList.toggle(className);
 }

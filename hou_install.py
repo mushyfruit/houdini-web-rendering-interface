@@ -20,7 +20,7 @@ MIN_HOUDINI = 20.0
 def valid_version(version):
     """Validate that the version downloaded supports Python3.9.
 
-    Currently, the Dockerfile and all other setup are targeting Houdini releases
+    Currently, the Dockerfile.houdini and all other setup are targeting Houdini releases
     that are built against python 3.9.
     """
     try:

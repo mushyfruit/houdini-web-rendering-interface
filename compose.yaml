@@ -1,23 +1,33 @@
 services:
-  houdini_cp_hbuild:
+  houdini_base:
     build:
-        context: .
-        args:
-          DOWNLOAD_HOUDINI: "false"
-          SIDEFX_CLIENT: "${SIDEFX_CLIENT}"
-          SIDEFX_SECRET: "${SIDEFX_SECRET}"
-          HFS_VER: "${HFS_VER}"
-    image: hou_cp_hbuild
-    container_name: hou_container_local
+      context: .
+      dockerfile: Dockerfile.houdini
+      args:
+        DOWNLOAD_HOUDINI: "false"
+        SIDEFX_CLIENT: "${SIDEFX_CLIENT}"
+        SIDEFX_SECRET: "${SIDEFX_SECRET}"
+        HFS_VER: "${HFS_VER}"
+    image: houdini-base
+    container_name: houdini_base
+    env_file:
+      - .env
+
+  hou_flask_app:
+    build:
+      context: .
+      dockerfile: Dockerfile.flask
+    image: flask_app_image
+    container_name: flask_container
     ports:
       - "8000:8080"
-    tty: true
     volumes:
       - ./project:/root/hou_webserver
       - shared_hip_storage:/root/hip_storage
     env_file:
       - .env
     depends_on:
+      - houdini_base
       - redis
 
   redis:
@@ -28,18 +38,14 @@ services:
   celery:
     build:
         context: .
-        args:
-          SIDEFX_CLIENT: "${SIDEFX_CLIENT}"
-          SIDEFX_SECRET: "${SIDEFX_SECRET}"
-          HFS_VER: "${HFS_VER}"
-    command: /bin/bash -c "source /root/setup_hserver.sh && celery --app make_celery worker --loglevel=info --logfile=logs/celery.log -E -c 2"
+        dockerfile: Dockerfile.celery
     volumes:
       - ./project:/root/hou_webserver
       - shared_hip_storage:/root/hip_storage
     env_file:
       - .env
     depends_on:
-      - houdini_cp_hbuild
+      - houdini_base
       - redis
   
 volumes:

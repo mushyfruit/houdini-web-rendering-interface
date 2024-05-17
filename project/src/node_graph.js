@@ -1,3 +1,5 @@
+import { cytoscape, io } from './main';
+
 let globalFileUuid = null;
 let poppers = {};
 const appState = {
@@ -136,8 +138,9 @@ class NodeManager {
 }
 
 const nodeGraphManager = new NodeManager();
+export { nodeGraphManager };
 
-function initNodeGraph(file_uuid, default_context = "/obj") {
+export function initNodeGraph(file_uuid, default_context = "/obj") {
     // Delete any lingering poppers from last session.
     deletePoppers();
 
@@ -321,7 +324,7 @@ function setupPoppers(cy) {
     })
 }
 
-function deletePoppers() {
+export function deletePoppers() {
     for (const popperId in poppers) {
         const popper = poppers[popperId];
 
@@ -673,7 +676,7 @@ function submitRenderTask(start, end, nodePath) {
                 // Server doesn't acknowledge event within timeout.
                 console.error("Server didn't acknowledge render event.");
             } else {
-                render_status = response.success
+                const render_status = response.success
                 if (!render_status) {
                     // TODO Display to user that submission failed.
                     console.error(response.message);

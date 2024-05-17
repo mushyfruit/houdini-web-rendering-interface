@@ -134,6 +134,7 @@ def graph_data():
 def get_node_graph():
     return render_template('node_graph.html'), 200
 
+
 @bp.route("/stored_models", methods=['GET'])
 def get_stored_models():
     return render_template('stored_models.html'), 200

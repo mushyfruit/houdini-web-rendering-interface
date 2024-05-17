@@ -16,17 +16,7 @@
   </div>
   
   {% block scripts %}
-    
-    <script src="{{ url_for('static', filename='js/model_display.js') }}" defer></script>
-    <script src="{{ url_for('static', filename='js/node_graph.js') }}" defer></script>
-    <script src="{{ url_for('static', filename='js/stored_models.js') }}" defer></script>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.27.0/cytoscape.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/2.9.2/umd/popper.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape-popper/2.0.0/cytoscape-popper.js"></script>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" integrity="sha384-mZLF4UVrpi/QTWPA7BjNPEnkIfRFn4ZEO3Qt/HFklTJBj/gBOV8G3HcKn4NfQblz" crossorigin="anonymous"></script>
+      <script type="module" src="{{ url_for('static', filename='dist/main.js') }}" defer></script>
   {% endblock %}
 </body>
 </html>

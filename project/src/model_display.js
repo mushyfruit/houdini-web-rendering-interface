@@ -1,3 +1,8 @@
+import * as BABYLON from '@babylonjs/core';
+
+// Must specify the loader as suffix here.
+import "@babylonjs/loaders/glTF";
+
 var canvas = document.getElementById('renderCanvas');
 
 //Engine(canvasOrContext, antialias, options, adaptToDeviceRatio);
@@ -26,7 +31,7 @@ function create_scene() {
     shadowGenerator.useKernelBlur = true;
 
     // Skybox
-    var skybox = new BABYLON.Mesh.CreateBox("skyBox", 10000, scene);
+    var skybox = new BABYLON.MeshBuilder.CreateBox("skyBox", {size: 10000}, scene);
     skybox.infiniteDistance = true;
 
     // Generate .env from .hdr file: https://www.babylonjs.com/tools/ibl/
@@ -120,18 +125,18 @@ function onInit() {
 }
 
 // Start and stop the render loop for performance.
-function stopRenderLoop() {
+export function stopRenderLoop() {
     engine.stopRenderLoop();
 }
 
-function startRenderLoop() {
+export function startRenderLoop() {
     engine.runRenderLoop(function () {
         scene.render();
     });
 }
 
 // Handle loading and clearing models.
-function loadModel(fileName, frameRange) {
+export function loadModel(fileName, frameRange) {
     clearModels();
 
     BABYLON.SceneLoader.ImportMeshAsync(null, "/get_glb/", fileName, scene).then(result => {
@@ -146,7 +151,7 @@ function loadModel(fileName, frameRange) {
             mesh.actionManager = new BABYLON.ActionManager(scene);
             mesh.actionManager.registerAction(
               new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickTrigger, () =>
-                  console.log("hi"),
+                  console.log("Clicked the model..."),
               ),
             );
 
