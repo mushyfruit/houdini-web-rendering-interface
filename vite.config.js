@@ -3,7 +3,8 @@ import { resolve } from 'path';
 
 export default defineConfig({
   root: 'project/src',
-    outDir: '../../project/app/static/dist',
+  build: {
+    outDir: '../../project/app/static/dist', // Correct placement of outDir
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'project/src/main.js')

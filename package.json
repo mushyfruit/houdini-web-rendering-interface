@@ -18,5 +18,8 @@
     "socket.io-client": "^4.7.5",
     "tweakpane": "^4.0.3",
     "vite": "^5.2.11"
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5"
   }
 }

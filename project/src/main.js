@@ -1,5 +1,5 @@
 import cytoscape from 'cytoscape';
-import dagre from "cytoscape-dagre";
+import dagre from 'cytoscape-dagre';
 import { createPopper } from '@popperjs/core';
 import cytoscapePopper from 'cytoscape-popper';
 import io from 'socket.io-client';
