@@ -73,6 +73,7 @@ export function hideRenderCanvas() {
 		canvas.style.zIndex = -1;
 		canvas.style.display = 'none';
 	}
+	modelDisplay.hideSettingsPanel();
 	modelDisplay.stopRenderLoop();
 }
 

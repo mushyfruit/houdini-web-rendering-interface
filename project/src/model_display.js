@@ -1,12 +1,13 @@
 import * as BABYLON from '@babylonjs/core';
+import { GridMaterial } from '@babylonjs/materials';
 import { Pane } from 'tweakpane';
-import { DISPLAY_UI_PARAMS } from './constants';
+import { DISPLAY_UI_PARAMS, DEFAULT_SKYBOXES } from './constants';
 
 // Must specify the loader as suffix here.
 import '@babylonjs/loaders/glTF';
 
 let canvas = document.getElementById('renderCanvas');
-let globalSettings, skyboxes, camera;
+let globalSettings, skyboxes, camera, debugGrid;
 
 //Engine(canvasOrContext, antialias, options, adaptToDeviceRatio);
 let engine = new BABYLON.Engine(canvas, true);
@@ -71,13 +72,12 @@ function create_scene() {
 
 	// Generate .env from .hdr file: https://www.babylonjs.com/tools/ibl/
 	// Custom packing IBL environment into single, optimized file.
-	const skyboxUrls = ['overcast_sky.env', 'photo_studio_small.env'];
-	skyboxes = skyboxUrls.map((url, index, arr) => {
+	const skyboxValues = Object.values(DEFAULT_SKYBOXES);
+	skyboxes = skyboxValues.map((url, index, arr) => {
 		const skyboxTexture = new BABYLON.CubeTexture(`/get_skybox/${url}`, scene);
 		const skybox = scene.createDefaultSkybox(skyboxTexture, true, 10000, 0.1);
 		return { skybox, skyboxTexture };
 	});
-
 	setCurrentSkybox(0);
 
 	scene.environmentTexture.level = 0.65;
@@ -171,11 +171,19 @@ function onInit() {
 }
 
 export function prepareModelDisplay() {
+	// Restart the engine if necessary.
 	if (engine.activeRenderLoops.length == 0) {
 		startRenderLoop();
 	}
 
-	generateSettingsPanel();
+	// Check if we've initialized the display settings panel.
+	// If so, just ensure that the panel is unhidden.
+	const panel = document.getElementById('tp-container');
+	if (panel.hasChildNodes()) {
+		panel.style.display = 'block';
+	} else {
+		generateSettingsPanel();
+	}
 }
 
 function generateSettingsPanel() {
@@ -209,7 +217,14 @@ function generateSettingsPanel() {
 
 	const display_bindings = [
 		{ key: 'background', callbackFunc: toggleBackground, pass_value: false },
-		{ key: 'wireframe', callbackFunc: toggleWireframe, pass_value: false },
+		{ key: 'wireframe', callbackFunc: toggleWireframe, pass_value: true },
+		{ key: 'grid', callbackFunc: toggleGrid, pass_value: false },
+		{
+			key: 'grid_size',
+			callbackFunc: updateGridSize,
+			options: { min: 0, max: 1000 },
+			pass_value: true,
+		},
 		{ key: 'autorotate', callbackFunc: toggleAutoRotate, pass_value: false },
 		{
 			key: 'autorotate_speed',
@@ -222,6 +237,7 @@ function generateSettingsPanel() {
 
 	display_bindings.forEach((binding) => {
 		setupDefaultBinding(
+			globalSettings.guiParams.displayBindings,
 			displayFolder,
 			binding.key,
 			binding.callbackFunc,
@@ -229,6 +245,8 @@ function generateSettingsPanel() {
 			binding.pass_value,
 		);
 	});
+
+	const lighting_bindings = [];
 
 	const lightingFolder = pane.addFolder({
 		title: 'Lighting',
@@ -238,17 +256,59 @@ function generateSettingsPanel() {
 		globalSettings.guiParams.ui.lighting.expanded = ev.expanded;
 		globalSettings.saveParams();
 	});
+
+	const skyboxOptions = Object.keys(DEFAULT_SKYBOXES).map((key) => ({
+		text: key,
+		value: DEFAULT_SKYBOXES[key],
+	}));
+
+	lightingFolder
+		.addBlade({
+			view: 'list',
+			label: 'environment',
+			options: skyboxOptions,
+			value: globalSettings.guiParams.lightingBindings.environment,
+		})
+		.on('change', (ev) => {
+			if (!ev.last) return;
+			setBackgroundTexture(ev.value);
+			globalSettings.guiParams.lightingBindings.environment = ev.value;
+			globalSettings.saveParams();
+		});
+
+	lighting_bindings.forEach((binding) => {
+		setupDefaultBinding(
+			globalSettings.guiParams.lightingBindings,
+			lightingFolder,
+			binding.key,
+			binding.callbackFunc,
+			binding.options || {},
+			binding.pass_value,
+		);
+	});
 }
 
-function setupDefaultBinding(folder, key, callbackFunc, options, pass_value = false) {
-	folder.addBinding(globalSettings.guiParams.displayBindings, key, options).on('change', (ev) => {
+function setBackgroundTexture(value) {
+	const skyboxValues = Object.values(DEFAULT_SKYBOXES);
+	const selectedIndex = skyboxValues.indexOf(value);
+	if (selectedIndex === -1) {
+		// Something went wrong, just fallback.
+		setCurrentSkybox(0);
+		console.error(`Unable to find environment: ${value}`);
+	} else {
+		setCurrentSkybox(selectedIndex);
+	}
+}
+
+function setupDefaultBinding(settings, folder, key, callbackFunc, options, pass_value = false) {
+	folder.addBinding(settings, key, options).on('change', (ev) => {
 		if (!ev.last) return;
 		if (pass_value) {
 			callbackFunc(ev.value);
 		} else {
 			callbackFunc();
 		}
-		globalSettings.guiParams.displayBindings[key] = ev.value;
+		settings[key] = ev.value;
 		globalSettings.saveParams();
 	});
 }
@@ -262,6 +322,107 @@ function rgbStringToColor3(rgbString) {
 
 function updateBackgroundColor(value) {
 	scene.clearColor = rgbStringToColor3(value);
+}
+
+function toggleGrid() {
+	if (!debugGrid) {
+		debugGrid = createGrid();
+	}
+
+	const gridEnabled = debugGrid.grid.isEnabled();
+	if (!gridEnabled) {
+		updateGridSize(globalSettings.guiParams.displayBindings.grid_size);
+	}
+	debugGrid.axes.forEach((axis) => {
+		axis.setEnabled(!gridEnabled);
+	});
+	debugGrid.grid.setEnabled(!gridEnabled);
+}
+
+function updateGridSize(value) {
+	if (debugGrid.grid.isEnabled()) {
+		// Get the vertex positions
+		let positions = debugGrid.grid.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+		positions[0] = -value / 2;
+		positions[1] = 0;
+		positions[2] = value / 2;
+
+		positions[3] = value / 2;
+		positions[4] = 0;
+		positions[5] = value / 2;
+
+		positions[6] = -value / 2;
+		positions[7] = 0;
+		positions[8] = -value / 2;
+
+		positions[9] = value / 2;
+		positions[10] = 0;
+		positions[11] = -value / 2;
+
+		debugGrid.grid.updateVerticesData(BABYLON.VertexBuffer.PositionKind, positions);
+		debugGrid.grid.refreshBoundingInfo();
+	}
+	globalSettings.guiParams.displayBindings.grid_size = value;
+	globalSettings.saveParams();
+}
+
+function createGrid(grid_size = 8) {
+	const grid = BABYLON.MeshBuilder.CreateGround(
+		'ground',
+		{ width: grid_size, height: grid_size, updatable: true },
+		scene,
+	);
+
+	const gridTexture = new GridMaterial('grid', scene);
+
+	gridTexture.backFaceCulling = false;
+	gridTexture.mainColor = BABYLON.Color3.Black();
+	gridTexture.lineColor = BABYLON.Color3.Black();
+	gridTexture.opacity = 0.5;
+
+	grid.material = gridTexture;
+	grid.alwaysSelectAsActiveMesh = true;
+	grid.isPickable = false;
+	grid.setEnabled(false);
+
+	const axes = createAxes(grid_size);
+
+	return { axes: axes, grid: grid };
+}
+
+function createAxes(grid_size) {
+	const axes = {
+		x: { direction: BABYLON.Vector3.Right(), color: BABYLON.Color3.Red() },
+		y: { direction: BABYLON.Vector3.Up(), color: BABYLON.Color3.Green() },
+		z: { direction: BABYLON.Vector3.Backward(), color: BABYLON.Color3.Blue() },
+	};
+
+	const lines = [];
+	const unitLength = grid_size / 2;
+
+	for (const axis in axes) {
+		const { direction, color: axis_color } = axes[axis];
+		const p1 = new BABYLON.Vector3(unitLength, unitLength, unitLength).multiplyInPlace(
+			direction,
+		);
+		const p2 = p1.scale(-1);
+
+		const line = BABYLON.MeshBuilder.CreateLines(
+			`${axis}`,
+			{
+				points: [p1, p2],
+				colors: [axis_color, axis_color],
+				useVertexAlpha: false,
+				updatable: false,
+			},
+			scene,
+		);
+		line.isPickable = false;
+		line.setEnabled(false);
+		lines.push(line);
+	}
+
+	return lines;
 }
 
 function toggleAutoRotate() {
@@ -298,14 +459,31 @@ function toggleBackground() {
 	}
 }
 
-function toggleWireframe() {
+function toggleWireframe(value) {
 	scene.meshes.forEach((mesh) => {
 		if (mesh.metadata && mesh.metadata.imported) {
 			if (mesh.material) {
-				mesh.material.wireframe = !mesh.material.wireframe;
+				if (!value) {
+					if (mesh.material.originalEmissiveColor) {
+						mesh.material.emissiveColor = mesh.material.originalEmissiveColor;
+					}
+				} else {
+					if (mesh.material.emissiveColor) {
+						mesh.material.originalEmissiveColor = mesh.material.emissiveColor.clone();
+					}
+					mesh.material.emissiveColor = BABYLON.Color3.White();
+				}
+				mesh.material.wireframe = value;
 			}
 		}
 	});
+}
+
+export function hideSettingsPanel() {
+	const panel = document.getElementById('tp-container');
+	if (panel) {
+		panel.style.display = 'none';
+	}
 }
 
 // Start and stop the render loop for performance.
@@ -339,9 +517,10 @@ export function loadModel(fileName, frameRange) {
 						console.log('Clicked the model...'),
 					),
 				);
-
-				scene.beginAnimation(scene, frameRange[0], frameRange[1], true);
 			});
+
+			toggleWireframe(globalSettings.guiParams.displayBindings.wireframe);
+			scene.beginAnimation(scene, frameRange[0], frameRange[1], true);
 		})
 		.catch((error) => {
 			console.log('Error loading the GLB file:', error);

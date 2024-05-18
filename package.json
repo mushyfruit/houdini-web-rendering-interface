@@ -8,6 +8,7 @@
   "dependencies": {
     "@babylonjs/core": "^7.7.0",
     "@babylonjs/loaders": "^7.7.0",
+    "@babylonjs/materials": "^7.7.0",
     "@phosphor-icons/web": "^2.1.1",
     "@popperjs/core": "^2.11.8",
     "bootstrap": "^5.3.3",
