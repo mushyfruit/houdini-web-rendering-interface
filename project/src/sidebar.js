@@ -81,7 +81,7 @@ function showRenderCanvas() {
 	if (canvas && canvas.style.display === 'none') {
 		canvas.style.display = 'block';
 		canvas.style.zIndex = 1;
-		modelDisplay.startRenderLoop();
+		modelDisplay.prepareModelDisplay();
 	}
 }
 

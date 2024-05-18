@@ -665,42 +665,40 @@ function startRenderTask(node) {
 }
 
 function submitRenderTask(start, end, nodePath) {
-	appState.socket
-		.timeout(5000)
-		.emit(
-			'submit_render_task',
-			{
-				start: start,
-				end: end,
-				step: 1,
-				path: nodePath,
-				file: nodeGraphManager.getLatestUUID(),
-			},
-			(err, response) => {
-				if (err) {
-					// Server doesn't acknowledge event within timeout.
-					console.error("Server didn't acknowledge render event.");
-				} else {
-					const render_status = response.success;
-					if (!render_status) {
-						// TODO Display to user that submission failed.
-						console.error(response.message);
-						return;
-					}
-
-					// TODO Display successful submission
-					console.log(response.message);
-
-					// Hide the thumbnail (if it exists)
-					const thumbnail = document.querySelector(
-						`#node-thumbnail[data-node-path="${nodePath}"]`,
-					);
-					if (thumbnail) {
-						thumbnail.style.display = 'none';
-					}
+	appState.socket.timeout(5000).emit(
+		'submit_render_task',
+		{
+			start: start,
+			end: end,
+			step: 1,
+			path: nodePath,
+			file: nodeGraphManager.getLatestUUID(),
+		},
+		(err, response) => {
+			if (err) {
+				// Server doesn't acknowledge event within timeout.
+				console.error("Server didn't acknowledge render event.");
+			} else {
+				const render_status = response.success;
+				if (!render_status) {
+					// TODO Display to user that submission failed.
+					console.error(response.message);
+					return;
 				}
-			},
-		);
+
+				// TODO Display successful submission
+				console.log(response.message);
+
+				// Hide the thumbnail (if it exists)
+				const thumbnail = document.querySelector(
+					`#node-thumbnail[data-node-path="${nodePath}"]`,
+				);
+				if (thumbnail) {
+					thumbnail.style.display = 'none';
+				}
+			}
+		},
+	);
 }
 
 function validateSubmission(start, end) {
