@@ -30,5 +30,10 @@ export const DISPLAY_UI_PARAMS = {
 	lightingBindings: {
 		// Always default to first entry to skyboxes mapping.
 		environment: Object.entries(DEFAULT_SKYBOXES)[0][1],
+		environment_exposure: 1,
+		environment_blur: 0.1,
+		environment_rotation: 0,
+		rotate_environment: false,
+		rotate_speed: 0,
 	},
 };

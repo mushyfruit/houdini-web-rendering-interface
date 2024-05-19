@@ -8,6 +8,7 @@ import '@babylonjs/loaders/glTF';
 
 let canvas = document.getElementById('renderCanvas');
 let globalSettings, skyboxes, camera, debugGrid;
+let skyboxMeshes = {};
 
 //Engine(canvasOrContext, antialias, options, adaptToDeviceRatio);
 let engine = new BABYLON.Engine(canvas, true);
@@ -38,7 +39,6 @@ class DisplaySettings {
 function create_scene() {
 	globalSettings = new DisplaySettings();
 	scene = new BABYLON.Scene(engine);
-
 	camera = new BABYLON.ArcRotateCamera(
 		'camera',
 		-Math.PI / 2,
@@ -74,11 +74,9 @@ function create_scene() {
 	// Custom packing IBL environment into single, optimized file.
 	const skyboxValues = Object.values(DEFAULT_SKYBOXES);
 	skyboxes = skyboxValues.map((url, index, arr) => {
-		const skyboxTexture = new BABYLON.CubeTexture(`/get_skybox/${url}`, scene);
-		const skybox = scene.createDefaultSkybox(skyboxTexture, true, 10000, 0.1);
-		return { skybox, skyboxTexture };
+		return new BABYLON.CubeTexture(`/get_skybox/${url}`, scene);
 	});
-	setCurrentSkybox(0);
+	setBackgroundTexture(skyboxValues[0]);
 
 	scene.environmentTexture.level = 0.65;
 	scene.environmentIntensity = 0.4;
@@ -145,12 +143,22 @@ function create_scene() {
 
 function setCurrentSkybox(index) {
 	if (globalSettings.guiParams.displayBindings.background) {
-		for (let i = 0; i < skyboxes.length; i++) {
-			const { skybox } = skyboxes[i];
-			skybox.setEnabled(i === index);
+		if (skyboxMeshes[index] === undefined) {
+			skyboxMeshes[index] = scene.createDefaultSkybox(
+				skyboxes[index],
+				true,
+				10000,
+				globalSettings.guiParams.lightingBindings.environment_blur,
+			);
+			scene.environmentTexture = skyboxes[index];
 		}
-		const { skyboxTexture } = skyboxes[index];
-		scene.environmentTexture = skyboxTexture;
+
+		// Disable all other skyboxes.
+		Object.keys(skyboxMeshes).forEach((meshIndex) => {
+			skyboxMeshes[meshIndex].setEnabled(parseInt(meshIndex) === index);
+		});
+
+		scene.environmentTexture = skyboxes[index];
 	} else {
 		globalSettings.lastTexture = index;
 	}
@@ -246,7 +254,33 @@ function generateSettingsPanel() {
 		);
 	});
 
-	const lighting_bindings = [];
+	const lighting_bindings = [
+		{
+			key: 'environment_exposure',
+			callbackFunc: adjustExposure,
+			options: { min: 0, max: 5 },
+			pass_value: true,
+		},
+		{
+			key: 'environment_blur',
+			callbackFunc: adjustEnvironmentBlur,
+			options: { min: 0, max: 1 },
+			pass_value: true,
+		},
+		{
+			key: 'environment_rotation',
+			callbackFunc: adjustEnvironmentRotation,
+			options: { min: 0, max: 360 },
+			pass_value: true,
+		},
+		{ key: 'rotate_environment', callbackFunc: toggleEnvironmentRotation, pass_value: true },
+		{
+			key: 'rotate_speed',
+			callbackFunc: () => {},
+			options: { min: 0, max: 100 },
+			pass_value: true,
+		},
+	];
 
 	const lightingFolder = pane.addFolder({
 		title: 'Lighting',
@@ -291,13 +325,17 @@ function generateSettingsPanel() {
 function setBackgroundTexture(value) {
 	const skyboxValues = Object.values(DEFAULT_SKYBOXES);
 	const selectedIndex = skyboxValues.indexOf(value);
+
 	if (selectedIndex === -1) {
 		// Something went wrong, just fallback.
 		setCurrentSkybox(0);
+		globalSettings.lastTexture = 0;
 		console.error(`Unable to find environment: ${value}`);
 	} else {
+		globalSettings.lastTexture = selectedIndex;
 		setCurrentSkybox(selectedIndex);
 	}
+	globalSettings.saveParams();
 }
 
 function setupDefaultBinding(settings, folder, key, callbackFunc, options, pass_value = false) {
@@ -324,9 +362,54 @@ function updateBackgroundColor(value) {
 	scene.clearColor = rgbStringToColor3(value);
 }
 
+function adjustExposure(value) {
+	scene.environmentIntensity = value;
+}
+
+function adjustEnvironmentBlur(value) {
+	const currentMesh = skyboxMeshes[globalSettings.lastTexture];
+	currentMesh.material.microSurface = 1 - value;
+}
+
+function adjustEnvironmentRotation(value) {
+	const currentMesh = skyboxMeshes[globalSettings.lastTexture];
+	const rotMatrix = BABYLON.Matrix.RotationY(BABYLON.Tools.ToRadians(value));
+	scene.environmentTexture.setReflectionTextureMatrix(rotMatrix);
+	currentMesh.material.reflectionTexture.setReflectionTextureMatrix(rotMatrix);
+}
+
+function toggleEnvironmentRotation(value) {
+	if (value) {
+		if (scene.environmentTexture) {
+			scene.registerBeforeRender(rotateTexture);
+		}
+	} else {
+		scene.unregisterBeforeRender(rotateTexture);
+	}
+}
+
+function mapRange(value, inMin, inMax, outMin, outMax) {
+	return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
+}
+
+function rotateTexture() {
+	if (!scene.environmentTexture) {
+		return;
+	}
+	const currentMesh = skyboxMeshes[globalSettings.lastTexture];
+	const matrix = currentMesh.material.reflectionTexture.getReflectionTextureMatrix();
+	const theta = Math.atan2(matrix.m[8], matrix.m[10]);
+	const angle = BABYLON.Tools.ToDegrees(theta);
+
+	const perFrame = mapRange(globalSettings.guiParams.lightingBindings.rotate_speed, 0, 100, 0, 2);
+	const rotMatrix = BABYLON.Matrix.RotationY(BABYLON.Tools.ToRadians(angle + perFrame));
+	scene.environmentTexture.setReflectionTextureMatrix(rotMatrix);
+	currentMesh.material.reflectionTexture.setReflectionTextureMatrix(rotMatrix);
+}
+
 function toggleGrid() {
 	if (!debugGrid) {
-		debugGrid = createGrid();
+		debugGrid = createGrid(globalSettings.guiParams.displayBindings.grid_size);
 	}
 
 	const gridEnabled = debugGrid.grid.isEnabled();
@@ -340,7 +423,7 @@ function toggleGrid() {
 }
 
 function updateGridSize(value) {
-	if (debugGrid.grid.isEnabled()) {
+	if (debugGrid && debugGrid.grid.isEnabled()) {
 		// Get the vertex positions
 		let positions = debugGrid.grid.getVerticesData(BABYLON.VertexBuffer.PositionKind);
 		positions[0] = -value / 2;
@@ -385,7 +468,8 @@ function createGrid(grid_size = 8) {
 	grid.isPickable = false;
 	grid.setEnabled(false);
 
-	const axes = createAxes(grid_size);
+	// Default to locking axes at 8 for now.
+	const axes = createAxes(8);
 
 	return { axes: axes, grid: grid };
 }
@@ -441,21 +525,12 @@ function adjustAutoRotateSpeed(value) {
 
 function toggleBackground() {
 	if (scene.environmentTexture) {
-		let skyboxIndex = -1;
-		for (var i = 0; i < skyboxes.length; i++) {
-			const { skybox } = skyboxes[i];
-			if (skybox.isEnabled()) {
-				skyboxIndex = i;
-			}
-			skybox.setEnabled(false);
-		}
-		globalSettings.lastTexture = skyboxIndex;
+		const mesh = skyboxMeshes[globalSettings.lastTexture];
+		mesh.setEnabled(false);
 		scene.environmentTexture = undefined;
 	} else {
-		const { skybox } = skyboxes[globalSettings.lastTexture];
-		const { skyboxTexture } = skyboxes[globalSettings.lastTexture];
-		skybox.setEnabled(true);
-		scene.environmentTexture = skyboxTexture;
+		setCurrentSkybox(globalSettings.lastTexture);
+		scene.environmentTexture = skyboxes[globalSettings.lastTexture];
 	}
 }
 
@@ -500,14 +575,13 @@ export function startRenderLoop() {
 // Handle loading and clearing models.
 export function loadModel(fileName, frameRange) {
 	clearModels();
-
 	BABYLON.SceneLoader.ImportMeshAsync(null, '/get_glb/', fileName, scene)
 		.then((result) => {
 			console.log('GLB Loaded Successfully!');
 			result.meshes.forEach((mesh) => {
 				mesh.metadata = { imported: true };
 				if (mesh.material && mesh.material instanceof BABYLON.PBRMaterial) {
-					mesh.material.microSurface = 0.2;
+					mesh.material.microSurface = 0.3;
 				}
 
 				// TODO Open panel to show current node's params? Fire off another render?

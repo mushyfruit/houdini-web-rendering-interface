@@ -20,7 +20,7 @@ services:
     image: flask_app_image
     container_name: flask_container
     ports:
-      - "8000:8080"
+      - "8000:8000"
     volumes:
       - ./project:/root/hou_webserver
       - shared_hip_storage:/root/hip_storage
@@ -47,6 +47,6 @@ services:
     depends_on:
       - houdini_base
       - redis
-  
+
 volumes:
   shared_hip_storage:

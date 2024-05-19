@@ -12,4 +12,4 @@ RUN pip install --no-cache-dir -r requirements_app.txt
 EXPOSE 8080
 
 # Run Flask server
-CMD ["/bin/bash", "-c", "source /root/setup_hserver.sh && flask run --host=0.0.0.0 --port=8080"]
+CMD ["/bin/bash", "-c", "source /root/setup_hserver.sh && flask run --host=0.0.0.0 --port=8000"]

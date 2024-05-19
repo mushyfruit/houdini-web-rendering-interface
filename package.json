@@ -4,7 +4,10 @@
   "description": "Preview glTF models directly from an uploaded hip file using Babylon.js",
   "author": "Mushy Fruit",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build"
+  },
   "dependencies": {
     "@babylonjs/core": "^7.7.0",
     "@babylonjs/loaders": "^7.7.0",
