@@ -239,7 +239,7 @@ body {
     color: #fff;
     background-color: #000;
     visibility: hidden;
-    transition: all 0.3s;
+    transition: left 0.3s;
 }
 
 .sidebar.active .menu > ul > li > a .text::after{
