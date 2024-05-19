@@ -110,7 +110,9 @@ def prepare_gltf_rop(out_node, category, is_manager, render_data, render_path, g
     logging.info("Rendering to: {0}".format(glb_path))
     out_node.parm("trange").set("normal")
     out_node.parm('file').set(glb_path)
-    out_node.parm('animationname').set("WebRenderDefault")
+
+    # Default animation name appears under "Animation Folder"
+    # out_node.parm('animationname').set("WebRenderDefault")
 
     # Directly set, rather than passing `frame_range` in render call
     # Useful to query "f2" to determine progress in callback.

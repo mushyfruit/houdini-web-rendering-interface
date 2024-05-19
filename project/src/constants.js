@@ -6,6 +6,11 @@ export const DEFAULT_SKYBOXES = {
 	'Aircraft Workshop': 'aircraft_workshop.env',
 };
 
+export const DEFAULT_CAMERA_OPTION = {
+	text: 'No cam',
+	value: 'defaultCamera',
+};
+
 export const DISPLAY_UI_PARAMS = {
 	ui: {
 		pane: {
@@ -15,6 +20,12 @@ export const DISPLAY_UI_PARAMS = {
 			expanded: true,
 		},
 		lighting: {
+			expanded: true,
+		},
+		camera: {
+			expanded: true,
+		},
+		animation: {
 			expanded: true,
 		},
 	},
@@ -35,5 +46,9 @@ export const DISPLAY_UI_PARAMS = {
 		environment_rotation: 0,
 		rotate_environment: false,
 		rotate_speed: 0,
+		disable_houdini_lighting: false,
+	},
+	cameraBindings: {
+		camera: 'defaultCamera',
 	},
 };
