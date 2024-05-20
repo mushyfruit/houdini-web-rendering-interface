@@ -1,4 +1,5 @@
 import { cytoscape, io } from './main';
+import { createThumbnail } from './stored_models.js';
 
 let globalFileUuid = null;
 let poppers = {};

@@ -45,7 +45,6 @@ class SceneManager {
 		return new BABYLON.Engine(this.canvas, true);
 	}
 
-
 	async _initialize() {
 		this.engine = await this._createEngine();
 		this._createScene();
@@ -106,7 +105,7 @@ class SceneManager {
 		});
 	}
 
-	handleFreeze(clear=false) {
+	handleFreeze(clear = false) {
 		if (clear) {
 			this.frozen_lock = false;
 		}
@@ -118,7 +117,7 @@ class SceneManager {
 		this.frozen = true;
 	}
 
-	handleUnfreeze(keep_frozen=false) {
+	handleUnfreeze(keep_frozen = false) {
 		this.frozen_lock = keep_frozen;
 		if (!this.frozen) {
 			return;
@@ -165,7 +164,7 @@ class SceneManager {
 			});
 		}
 
-		this.debugGrid.alwaysSelectAsActiveMesh = true
+		this.debugGrid.alwaysSelectAsActiveMesh = true;
 		sceneManager.handleFreeze();
 	}
 
@@ -198,7 +197,7 @@ class SceneManager {
 			);
 			line.isPickable = false;
 			line.setEnabled(false);
-			line.alwaysSelectAsActiveMesh = true
+			line.alwaysSelectAsActiveMesh = true;
 			lines.push(line);
 		}
 
@@ -753,10 +752,16 @@ function toggleWireframe(value) {
 				if (!value) {
 					if (mesh.material.originalEmissiveColor) {
 						mesh.material.emissiveColor = mesh.material.originalEmissiveColor;
+						mesh.material.originalEmissiveColor = null;
 					}
 				} else {
 					if (mesh.material.emissiveColor) {
-						mesh.material.originalEmissiveColor = mesh.material.emissiveColor.clone();
+						if (!mesh.material.originalEmissiveColor) {
+							mesh.material.originalEmissiveColor =
+								mesh.material.emissiveColor.clone();
+						}
+					} else {
+						mesh.material.originalEmissiveColor = BABYLON.Color3.Black();
 					}
 					mesh.material.emissiveColor = BABYLON.Color3.White();
 				}
@@ -837,7 +842,6 @@ export function loadModel(fileName, frameRange) {
 			});
 
 			toggleWireframe(globalSettings.guiParams.displayBindings.wireframe);
-
 		})
 		.catch((error) => {
 			console.log('Error loading the GLB file:', error);
@@ -855,20 +859,20 @@ function clearModels() {
 	// Dispose of any meshes previously loaded.
 	sceneManager.scene.meshes.forEach((mesh) => {
 		if (mesh.metadata && mesh.metadata.imported) {
-			console.log(`Deleting ${mesh.name}`)
+			console.log(`Deleting ${mesh.name}`);
 			mesh.dispose();
 		}
 	});
 }
 
 async function initializeSceneManager() {
-    sceneManager = new SceneManager();
-    await sceneManager._initialize();
+	sceneManager = new SceneManager();
+	await sceneManager._initialize();
 }
 
 globalSettings = new DisplaySettings();
 initializeSceneManager().then(() => {
-	console.log("SceneManager has been initialized.")
+	console.log('SceneManager has been initialized.');
 	create_scene();
 	onInit();
-})
+});

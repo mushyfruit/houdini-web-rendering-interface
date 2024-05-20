@@ -2,7 +2,7 @@ import * as modelDisplay from './model_display';
 import { nodeGraphManager, initNodeGraph, deletePoppers } from './node_graph';
 import { handleStoredModels, handleStoredModelsToggle } from './stored_models';
 
-import Swal  from 'sweetalert2';
+import Swal from 'sweetalert2';
 
 document.addEventListener('DOMContentLoaded', (event) => {
 	getUserID();
@@ -268,7 +268,7 @@ function setupSidebar() {
 		}
 	});
 
-	const helpButton = document.querySelector(".help-btn");
+	const helpButton = document.querySelector('.help-btn');
 	if (helpButton) {
 		helpButton.addEventListener('click', (e) => {
 			displayHelpInformation();
@@ -301,7 +301,7 @@ function slideToggle(element) {
 
 function displayHelpInformation() {
 	Swal.fire({
-		title: "Using the Houdini Web Previewer",
+		title: 'Using the Houdini Web Previewer',
 		html: `
 			<div class="help-align-left">
 				<div class="help-align-center-small">
@@ -326,7 +326,7 @@ function displayHelpInformation() {
 				</div>
             </div>
         `,
-		icon: "question",
+		icon: 'question',
 		animation: false,
 		width: '70%',
 	});

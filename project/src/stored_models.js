@@ -228,7 +228,7 @@ function adjustCardTitleToContainer(cardTitle) {
 	}
 }
 
-function createThumbnail(thumb_name, nodePath, filePath, glbPath) {
+export function createThumbnail(thumb_name, nodePath, filePath, glbPath) {
 	const thumbUrl = `/get_thumbnail/${thumb_name}`;
 
 	const img = document.createElement('img');
