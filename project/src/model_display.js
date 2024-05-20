@@ -11,9 +11,8 @@ let sceneManager, globalSettings;
 class SceneManager {
 	constructor() {
 		this.canvas = document.getElementById('renderCanvas');
+		this.engine = null;
 
-		//Engine(canvasOrContext, antialias, options, adaptToDeviceRatio);
-		this.engine = new BABYLON.Engine(this.canvas, true);
 		this.scene = null;
 		this.frozen = false;
 		this.frozen_lock = false;
@@ -33,11 +32,22 @@ class SceneManager {
 
 		this.debugGrid = null;
 		this.axes = null;
-
-		this._initialize();
 	}
 
-	_initialize() {
+	async _createEngine() {
+		const webGPUSupported = await BABYLON.WebGPUEngine.IsSupportedAsync;
+		if (webGPUSupported) {
+			const engine = new BABYLON.WebGPUEngine(this.canvas);
+			await engine.initAsync();
+			return engine;
+		}
+		// WebGL2 by default.
+		return new BABYLON.Engine(this.canvas, true);
+	}
+
+
+	async _initialize() {
+		this.engine = await this._createEngine();
 		this._createScene();
 		this._createSettingsPane();
 		this._createDefaultCamera();
@@ -851,7 +861,14 @@ function clearModels() {
 	});
 }
 
+async function initializeSceneManager() {
+    sceneManager = new SceneManager();
+    await sceneManager._initialize();
+}
+
 globalSettings = new DisplaySettings();
-sceneManager = new SceneManager();
-create_scene();
-onInit();
+initializeSceneManager().then(() => {
+	console.log("SceneManager has been initialized.")
+	create_scene();
+	onInit();
+})
