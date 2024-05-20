@@ -778,3 +778,31 @@ label[for="start-frame"] {
 #renderAllBtn:active {
     background-image: linear-gradient(rgba(255, 255, 255, 0), rgba(255, 255, 255, 0)), linear-gradient(23deg, #5b6677, #2b3448);
 }
+
+.help-align-left {
+  text-align: left;
+}
+
+.help-align-center-small {
+  text-align: center;
+  font-size: 0.875em;
+}
+
+.help-list {
+    list-style-type: disc;
+    padding-left: 20px;
+}
+
+.help-list > li {
+    margin-left: 20px;
+}
+
+.help-image {
+    border-radius: 5px;
+    margin-left: 40px;
+}
+
+.larger-help-icon {
+    font-size: 1.5em;
+    vertical-align: middle;
+}

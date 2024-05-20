@@ -498,7 +498,7 @@ function buildPopperDiv(node) {
                     </div>
                 </div>
                 <div id="frame-input-container">
-                    <label for="start-frame">Start/End/Inc</label>
+                    <label for="start-frame">Start/End</label>
                     <input type="number" id="start-frame" name="startFrame" min="1" class="frame-input" value="${nodeStartFrame}">
                     <input type="number" id="end-frame" name="endFrame" min="2" class="frame-input" value="${nodeEndFrame}">
                 </div>

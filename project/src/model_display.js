@@ -15,12 +15,15 @@ class SceneManager {
 		//Engine(canvasOrContext, antialias, options, adaptToDeviceRatio);
 		this.engine = new BABYLON.Engine(this.canvas, true);
 		this.scene = null;
+		this.frozen = false;
+		this.frozen_lock = false;
 		this.skyboxes = [];
 		this.skyboxMeshes = {};
 		this.skyboxValues = [];
 
 		this.lightingBlade = null;
 		this.currentSceneLights = null;
+		this.isDefaultSkyboxLoaded = false;
 
 		this.pane = null;
 		this.cameraFolder = null;
@@ -39,10 +42,23 @@ class SceneManager {
 		this._createSettingsPane();
 		this._createDefaultCamera();
 		this._createSkyboxTextures();
+
+		if (globalSettings.guiParams.displayBindings.grid) {
+			const size = globalSettings.guiParams.displayBindings.grid_size;
+			this.createDebugGrid(size, true);
+		}
 	}
 
 	_createScene() {
 		this.scene = new BABYLON.Scene(this.engine);
+
+		if (this.canvas) {
+			this.canvas.width = window.innerWidth;
+			this.canvas.height = window.innerHeight;
+		}
+		window.addEventListener('resize', () => {
+			this.engine.resize();
+		});
 	}
 
 	_createSettingsPane() {
@@ -56,7 +72,7 @@ class SceneManager {
 	_createDefaultCamera() {
 		this.camera = new BABYLON.ArcRotateCamera(
 			'defaultCamera',
-			-Math.PI / 2,
+			Math.PI / 2,
 			Math.PI / 2.5,
 			15,
 			new BABYLON.Vector3(0, 0, 0),
@@ -65,7 +81,8 @@ class SceneManager {
 
 		// Adjust the scrolling zoom speed.
 		this.camera.wheelPrecision = 50;
-		this.camera.maxZ = 50000;
+		this.camera.maxZ = 150000;
+		this.camera.minZ = 0;
 	}
 
 	_createSkyboxTextures() {
@@ -73,15 +90,41 @@ class SceneManager {
 		// Custom packing IBL environment into single, optimized file.
 		this.skyboxValues = Object.values(DEFAULT_SKYBOXES);
 		this.skyboxes = this.skyboxValues.map((url, index, arr) => {
-			return new BABYLON.CubeTexture(`/get_skybox/${url}`, this.scene);
+			const texture = new BABYLON.CubeTexture(`/get_skybox/${url}`, this.scene);
+			texture.level = 0.65;
+			return texture;
 		});
+	}
+
+	handleFreeze(clear=false) {
+		if (clear) {
+			this.frozen_lock = false;
+		}
+		if (this.frozen || this.frozen_lock) {
+			return;
+		}
+
+		this.scene.freezeActiveMeshes();
+		this.frozen = true;
+	}
+
+	handleUnfreeze(keep_frozen=false) {
+		this.frozen_lock = keep_frozen;
+		if (!this.frozen) {
+			return;
+		}
+
+		this.scene.unfreezeActiveMeshes();
+		this.scene.freeActiveMeshes();
+		this.frozen = false;
 	}
 
 	clearSceneLights() {
 		this.currentSceneLights = [];
 	}
 
-	createDebugGrid(grid_size = 8) {
+	createDebugGrid(grid_size, enabled = false) {
+		sceneManager.handleUnfreeze();
 		const grid = BABYLON.MeshBuilder.CreateGround(
 			'ground',
 			{ width: grid_size, height: grid_size, updatable: true },
@@ -104,6 +147,16 @@ class SceneManager {
 
 		// Default to locking axes at 8 for now.
 		this.axes = this.createAxes(8);
+
+		if (enabled) {
+			this.debugGrid.setEnabled(true);
+			this.axes.forEach((axis) => {
+				axis.setEnabled(true);
+			});
+		}
+
+		this.debugGrid.alwaysSelectAsActiveMesh = true
+		sceneManager.handleFreeze();
 	}
 
 	createAxes(grid_size) {
@@ -135,6 +188,7 @@ class SceneManager {
 			);
 			line.isPickable = false;
 			line.setEnabled(false);
+			line.alwaysSelectAsActiveMesh = true
 			lines.push(line);
 		}
 
@@ -210,32 +264,29 @@ function create_scene() {
 	shadowGenerator.useExponentialShadowMap = true;
 	shadowGenerator.useKernelBlur = true;
 
-	// Set the default background texture.
-	setBackgroundTexture(sceneManager.skyboxValues[0]);
-
-	scene.environmentTexture.level = 0.65;
+	// Tone it down a bit from the start.
 	scene.environmentIntensity = 0.4;
 
-	const highPassKernel = [0, -1 / 8, 0, -1 / 8, 1.25, -1 / 8, 0, -1 / 8, 0];
-	const highPass = new BABYLON.ConvolutionPostProcess(
-		'highPass',
-		highPassKernel,
-		1.0,
-		sceneManager.camera,
-	);
-
-	// Set up Ambient Occlusion
-	let ssaoRatio = {
-		ssaoRatio: 0.5,
-		blurRatio: 0.5,
-	};
-
-	let ssao = new BABYLON.SSAO2RenderingPipeline('ssao', scene, ssaoRatio, null, false);
-	ssao.radius = 0.5;
-	ssao.totalStrength = 1.0;
-	ssao.expensiveBlur = false;
-	ssao.samples = 16;
-	ssao.maxZ = 250;
+	// const highPassKernel = [0, -1 / 8, 0, -1 / 8, 1.25, -1 / 8, 0, -1 / 8, 0];
+	// const highPass = new BABYLON.ConvolutionPostProcess(
+	// 	'highPass',
+	// 	highPassKernel,
+	// 	1.0,
+	// 	sceneManager.camera,
+	// );
+	//
+	// // Set up Ambient Occlusion
+	// let ssaoRatio = {
+	// 	ssaoRatio: 0.5,
+	// 	blurRatio: 0.5,
+	// };
+	//
+	// let ssao = new BABYLON.SSAO2RenderingPipeline('ssao', scene, ssaoRatio, null, false);
+	// ssao.radius = 0.5;
+	// ssao.totalStrength = 1.0;
+	// ssao.expensiveBlur = false;
+	// ssao.samples = 16;
+	// ssao.maxZ = 250;
 
 	// Need to attach relevant cameras or else it'll freeze the render.
 	//scene.postProcessRenderPipelineManager.attachCamerasToRenderPipeline('ssao', sceneManager.camera);
@@ -253,36 +304,32 @@ function create_scene() {
 
 function setCurrentSkybox(index) {
 	if (globalSettings.guiParams.displayBindings.background) {
+		sceneManager.handleUnfreeze();
 		if (sceneManager.skyboxMeshes[index] === undefined) {
 			sceneManager.skyboxMeshes[index] = sceneManager.scene.createDefaultSkybox(
 				sceneManager.skyboxes[index],
 				true,
-				10000,
+				1000,
 				globalSettings.guiParams.lightingBindings.environment_blur,
 			);
+
+			sceneManager.skyboxMeshes[index].alwaysSelectAsActiveMesh = true;
+			sceneManager.scene.environmentTexture = sceneManager.skyboxes[index];
+		} else {
 			sceneManager.scene.environmentTexture = sceneManager.skyboxes[index];
 		}
-
 		// Disable all other skyboxes.
 		Object.keys(sceneManager.skyboxMeshes).forEach((meshIndex) => {
 			sceneManager.skyboxMeshes[meshIndex].setEnabled(parseInt(meshIndex) === index);
 		});
 
-		sceneManager.scene.environmentTexture = sceneManager.skyboxes[index];
+		sceneManager.handleFreeze();
 	} else {
 		globalSettings.lastTexture = index;
 	}
 }
 
 function onInit() {
-	if (sceneManager.canvas) {
-		sceneManager.canvas.width = window.innerWidth;
-		sceneManager.canvas.height = window.innerHeight;
-	}
-	window.addEventListener('resize', () => {
-		sceneManager.engine.resize();
-	});
-
 	prepareModelDisplay();
 	loadModel('placeholder.glb', [1, 240]);
 }
@@ -325,7 +372,7 @@ function generateSettingsPanel() {
 	const display_bindings = [
 		{ key: 'background', callbackFunc: toggleBackground, pass_value: false },
 		{ key: 'wireframe', callbackFunc: toggleWireframe, pass_value: true },
-		{ key: 'grid', callbackFunc: toggleGrid, pass_value: false },
+		{ key: 'grid', callbackFunc: toggleGrid, pass_value: true },
 		{
 			key: 'grid_size',
 			callbackFunc: updateGridSize,
@@ -382,14 +429,12 @@ function generateSettingsPanel() {
 		{ key: 'disable_houdini_lighting', callbackFunc: toggleHoudiniLights, pass_value: true },
 	];
 
-	console.log(globalSettings.guiParams.ui.lighting.expanded);
 	const lightingFolder = sceneManager.pane.addFolder({
 		title: 'Lighting',
 		expanded: globalSettings.guiParams.ui.lighting.expanded,
 	});
 	lightingFolder.on('fold', (ev) => {
 		globalSettings.guiParams.ui.lighting.expanded = ev.expanded;
-		console.log(ev.expanded);
 		globalSettings.saveParams();
 	});
 
@@ -509,9 +554,11 @@ function displayAnimation(target, value) {
 
 function toggleHoudiniLights(value) {
 	if (sceneManager.currentSceneLights) {
+		sceneManager.handleUnfreeze();
 		sceneManager.currentSceneLights.forEach((light) => {
 			light.setEnabled(!value);
 		});
+		sceneManager.handleFreeze();
 	}
 }
 
@@ -614,7 +661,9 @@ function rotateTexture() {
 	currentMesh.material.reflectionTexture.setReflectionTextureMatrix(rotMatrix);
 }
 
-function toggleGrid() {
+function toggleGrid(value) {
+	sceneManager.handleUnfreeze();
+
 	if (!sceneManager.debugGrid) {
 		sceneManager.createDebugGrid(globalSettings.guiParams.displayBindings.grid_size);
 	}
@@ -624,9 +673,11 @@ function toggleGrid() {
 		updateGridSize(globalSettings.guiParams.displayBindings.grid_size);
 	}
 	sceneManager.axes.forEach((axis) => {
-		axis.setEnabled(!gridEnabled);
+		axis.setEnabled(value);
 	});
-	sceneManager.debugGrid.setEnabled(!gridEnabled);
+	sceneManager.debugGrid.setEnabled(value);
+
+	sceneManager.handleFreeze();
 }
 
 function updateGridSize(value) {
@@ -674,9 +725,11 @@ function adjustAutoRotateSpeed(value) {
 
 function toggleBackground() {
 	if (sceneManager.scene.environmentTexture) {
+		sceneManager.handleUnfreeze();
 		const mesh = sceneManager.skyboxMeshes[globalSettings.lastTexture];
 		mesh.setEnabled(false);
 		sceneManager.scene.environmentTexture = undefined;
+		sceneManager.handleFreeze();
 	} else {
 		setCurrentSkybox(globalSettings.lastTexture);
 		sceneManager.scene.environmentTexture = sceneManager.skyboxes[globalSettings.lastTexture];
@@ -723,6 +776,8 @@ export function startRenderLoop() {
 
 // Handle loading and clearing models.
 export function loadModel(fileName, frameRange) {
+	sceneManager.handleUnfreeze(true);
+
 	clearModels();
 	BABYLON.SceneLoader.ImportMeshAsync(null, '/get_glb/', fileName, sceneManager.scene)
 		.then((result) => {
@@ -736,7 +791,6 @@ export function loadModel(fileName, frameRange) {
 			}
 
 			// Toggle "disable_houdini_lighting" blade if no lights.
-
 			const hasLights = result.lights.length > 0;
 			sceneManager.toggleLightBlade(hasLights);
 			if (hasLights) {
@@ -754,6 +808,11 @@ export function loadModel(fileName, frameRange) {
 
 			result.meshes.forEach((mesh) => {
 				mesh.metadata = { imported: true };
+
+				mesh.freezeWorldMatrix();
+				mesh.alwaysSelectAsActiveMesh = true;
+
+				// Shader compilation seems to be a major issue with performance.
 				if (mesh.material && mesh.material instanceof BABYLON.PBRMaterial) {
 					mesh.material.microSurface = 0.3;
 				}
@@ -768,22 +827,25 @@ export function loadModel(fileName, frameRange) {
 			});
 
 			toggleWireframe(globalSettings.guiParams.displayBindings.wireframe);
-			sceneManager.scene.beginAnimation(
-				sceneManager.scene,
-				frameRange[0],
-				frameRange[1],
-				true,
-			);
+
 		})
 		.catch((error) => {
 			console.log('Error loading the GLB file:', error);
 		});
+
+	if (!sceneManager.isDefaultSkyboxLoaded) {
+		setBackgroundTexture(globalSettings.guiParams.lightingBindings.environment);
+		sceneManager.isDefaultSkyboxLoaded = true;
+	}
+
+	sceneManager.handleFreeze(true);
 }
 
 function clearModels() {
 	// Dispose of any meshes previously loaded.
 	sceneManager.scene.meshes.forEach((mesh) => {
 		if (mesh.metadata && mesh.metadata.imported) {
+			console.log(`Deleting ${mesh.name}`)
 			mesh.dispose();
 		}
 	});

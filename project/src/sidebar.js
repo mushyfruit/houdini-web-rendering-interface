@@ -2,6 +2,8 @@ import * as modelDisplay from './model_display';
 import { nodeGraphManager, initNodeGraph, deletePoppers } from './node_graph';
 import { handleStoredModels, handleStoredModelsToggle } from './stored_models';
 
+import Swal  from 'sweetalert2';
+
 document.addEventListener('DOMContentLoaded', (event) => {
 	getUserID();
 	connectFileInput();
@@ -265,6 +267,13 @@ function setupSidebar() {
 			});
 		}
 	});
+
+	const helpButton = document.querySelector(".help-btn");
+	if (helpButton) {
+		helpButton.addEventListener('click', (e) => {
+			displayHelpInformation();
+		});
+	}
 }
 
 function slideToggle(element) {
@@ -288,6 +297,39 @@ function slideToggle(element) {
 			{ once: true },
 		);
 	}
+}
+
+function displayHelpInformation() {
+	Swal.fire({
+		title: "Using the Houdini Web Previewer",
+		html: `
+			<div class="help-align-left">
+				<div class="help-align-center-small">
+					<p>Preview, render, and share the contents of a Houdini workfile without leaving your browser!</p>
+				</div>
+				<br>
+				<ol>
+					<li><strong>Upload a HIP File:</strong> Click on 'Upload HIP' <i class="icon ph-bold ph-upload-simple larger-help-icon"></i> and select your HIP file from your computer.</li>
+					<li><strong>Node Graph Preview</strong> Click on 'Node Graph' <i class="icon ph-bold ph-graph larger-help-icon"></i> to preview the uploaded HIP's node graph in the browser.</li>
+						<ul class="help-list">
+							<li>Render Context: Click 'Render Context' to export a glTF file in the current node graph's context.</li>
+							<li>Navigation: Double-click a node to enter it. Jump to a specific context via the uppermost context bar.</li>
+							<li>Render Node: Left-click a node to open the per-node render pane.</li>
+							<li>Settings: Specify custom start and end values to determine length of glTF's animation.</li>
+						</ul>
+					<li><strong>View the Export:</strong> Once uploaded, the 3D model will be available by clicking "Display Model" <i class="icon ph-bold ph-monitor larger-help-icon"></i> in the sidebar.</li>
+					<li><strong>View Previous Exports:</strong> Previously output glTF files will be available for preview on the "Stored Models" <i class="icon ph-bold ph-archive larger-help-icon"></i> page.</li>
+				</ol>
+				<br>
+				<div class="help-align-center-small">
+					<p>Visit the <a href="https://github.com/mushyfruit/houdini-web-rendering-interface" target="_blank">GitHub repo</a> for more help or to provide feedback.</p>
+				</div>
+            </div>
+        `,
+		icon: "question",
+		animation: false,
+		width: '70%',
+	});
 }
 
 function getSiblings(elem) {

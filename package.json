@@ -20,6 +20,7 @@
     "cytoscape-popper": "^4.0.0",
     "dagre": "^0.8.5",
     "socket.io-client": "^4.7.5",
+    "sweetalert2": "^11.11.0",
     "tweakpane": "^4.0.3",
     "vite": "^5.2.11"
   },
