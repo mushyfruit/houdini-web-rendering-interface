@@ -4,7 +4,7 @@ import { resolve } from 'path';
 export default defineConfig({
   root: 'project/src',
   build: {
-    outDir: '../../project/app/static/dist', // Correct placement of outDir
+    outDir: '../../nginx/static/dist',
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'project/src/main.js')

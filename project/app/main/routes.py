@@ -49,13 +49,6 @@ def get_thumbnail(filename):
     return send_from_directory(static_directory, filename)
 
 
-@bp.route("/get_skybox/<filename>", methods=['GET'])
-def get_skybox(filename):
-    static_directory = os.path.join(current_app.static_folder, 'skybox')
-    print(os.path.join(static_directory, filename))
-    return send_from_directory(static_directory, filename)
-
-
 @bp.route("/get_glb/<filename>", methods=['GET'])
 def get_glb_file(filename):
     if not filename.endswith(".glb"):

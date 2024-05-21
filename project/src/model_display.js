@@ -99,7 +99,7 @@ class SceneManager {
 		// Custom packing IBL environment into single, optimized file.
 		this.skyboxValues = Object.values(DEFAULT_SKYBOXES);
 		this.skyboxes = this.skyboxValues.map((url, index, arr) => {
-			const texture = new BABYLON.CubeTexture(`/get_skybox/${url}`, this.scene);
+			const texture = new BABYLON.CubeTexture(`/static/skybox/${url}`, this.scene);
 			texture.level = 0.65;
 			return texture;
 		});

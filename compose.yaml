@@ -48,5 +48,18 @@ services:
       - houdini_base
       - redis
 
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    container_name: nginx_proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx:/var/www
+      - shared_hip_storage:/var/hip_storage
+    depends_on:
+      - hou_flask_app
+
 volumes:
   shared_hip_storage:
