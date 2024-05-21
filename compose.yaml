@@ -24,6 +24,7 @@ services:
     volumes:
       - ./project:/root/hou_webserver
       - shared_hip_storage:/root/hip_storage
+      - flask_socket:/run/flask-socket
     env_file:
       - .env
     depends_on:
@@ -58,8 +59,10 @@ services:
     volumes:
       - ./nginx:/var/www
       - shared_hip_storage:/var/hip_storage
+      - flask_socket:/run/flask-socket
     depends_on:
       - hou_flask_app
 
 volumes:
   shared_hip_storage:
+  flask_socket:

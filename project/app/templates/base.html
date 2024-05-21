@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="{{ url_for('static', filename='icons/favicon.ico') }}" type="image/x-icon">
+  <link rel="shortcut icon" href="{{ url_for('static', filename='icons/favicon.ico') }}" type="image/x-icon">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='icons/favicon-16x16.png') }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32x32.png') }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
   <title>{% block title %}Houdini Web Preview{% endblock %}</title>
   {% block head_additional %}{% endblock %}
@@ -14,7 +19,7 @@
     {% block sidebar %}{% endblock %}
     {% block content %}{% endblock %}
   </div>
-  
+
   {% block scripts %}
       <script type="module" src="{{ url_for('static', filename='dist/main.js') }}" defer></script>
   {% endblock %}
