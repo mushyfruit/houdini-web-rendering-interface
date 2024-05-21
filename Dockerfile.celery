@@ -1,9 +1,12 @@
 FROM houdini-base
 
+# Probably should set this up not to run as root for security concerns.
+# However, leaving this as root for now to avoid setting up depedencies for a celery user.
 COPY setup_hserver.sh /root/
 RUN chmod +x /root/setup_hserver.sh
 
 COPY . .
 
 RUN pip install --no-cache-dir -r requirements_app.txt
+
 CMD ["/bin/bash", "-c", "source /root/setup_hserver.sh && celery --app make_celery worker --loglevel=info --logfile=logs/celery.log -E -c 2"]

@@ -5,3 +5,4 @@
 **/venv
 **/util
 project/app/static/**
+node_modules

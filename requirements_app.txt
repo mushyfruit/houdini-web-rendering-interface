@@ -10,10 +10,17 @@ click==8.1.7
 click-didyoumean==0.3.0
 click-plugins==1.1.1
 click-repl==0.3.0
+dnspython==2.6.1
+eventlet==0.36.1
 Flask==3.0.2
 Flask-Session==0.8.0
 Flask-SocketIO==5.3.6
+greenlet==3.0.3
+gunicorn==22.0.0
 h11==0.14.0
+h2==4.1.0
+hpack==4.0.0
+hyperframe==6.0.1
 idna==3.4
 importlib-metadata==7.0.0
 itsdangerous==2.1.2
@@ -21,7 +28,9 @@ Jinja2==3.1.3
 kombu==5.3.5
 MarkupSafe==2.1.5
 msgspec==0.18.6
+packaging==24.0
 platformdirs==4.1.0
+priority==2.0.0
 prompt-toolkit==3.0.43
 python-dateutil==2.8.2
 python-dotenv==1.0.0
