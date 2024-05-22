@@ -1,6 +1,8 @@
+import re
 import os
 import glob
 import uuid
+from nanoid import generate
 
 from app import redis_client
 from app.main import bp
@@ -25,6 +27,45 @@ def generate_user_uuid():
     user_uuid = str(uuid.uuid4())
     session["user_uuid"] = user_uuid
     return jsonify(user_uuid=user_uuid)
+
+
+@bp.route("/get_nano_id", methods=["GET"])
+def generate_nano_id():
+    filename = request.args.get('filename')
+    if not filename:
+        return jsonify({
+            "error": "No filename was provided for nano id generation request."
+        }), 400
+
+    # Could increase to avoid collision probability.
+    stored_nano_id = redis_client.has_generated_nanoid(filename)
+    if stored_nano_id is None:
+        nano_id = generate(size=10)
+        redis_client.add_shareable_mapping(nano_id, filename)
+        stored_nano_id = nano_id
+    return jsonify({"nano_id": stored_nano_id}), 200
+
+
+@bp.route("/get_glb_from_nano/<nano_id>", methods=["GET"])
+def retrieve_file_from_nano_id(nano_id):
+    if nano_id.endswith(".glb") or nano_id.endswith(".gltf"):
+        pattern = re.compile(r'\.glb$|\.gltf$', re.IGNORECASE)
+        nano_id = re.sub(pattern, '', nano_id)
+
+    filename = redis_client.get_filename_for_nanoid(nano_id)
+    if filename is None:
+        print(f"No filename found for nano_id: {nano_id}")
+        return jsonify({"error": "Filename not found for the given nano_id."}), 404
+
+    return get_glb_file(filename)
+
+
+@bp.route('/view', methods=['GET'])
+def view():
+    # Store a session id to manage web sockets.
+    if "session_id" not in session:
+        session["session_id"] = str(uuid.uuid4())
+    return render_template('index.html')
 
 
 @bp.route("/set_existing_user_uuid", methods=["POST"])
@@ -69,6 +110,7 @@ def get_glb_file(filename):
         print("{0} does not exist on disk.".format(glb_file_path))
         return jsonify({"error": "Requested an invalid .glb file."}), 400
 
+    # Send with mimetype as gltf+json (even though file is .glb).
     return send_file(glb_file_path,
                      mimetype='application/gltf+json',
                      as_attachment=True,
@@ -187,7 +229,6 @@ def retrieve_stored_models():
         return jsonify({"message": "Invalid request. Specify a user_uuid."}), 400
 
     stored_model_data = redis_client.get_user_uploaded_file_dicts(user_uuid)
-    print(stored_model_data)
     if stored_model_data:
         return jsonify({'model_data': stored_model_data})
     else:

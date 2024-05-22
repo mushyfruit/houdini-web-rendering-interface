@@ -28,6 +28,9 @@ export const DISPLAY_UI_PARAMS = {
 		animation: {
 			expanded: true,
 		},
+		share: {
+			expanded: true,
+		},
 	},
 	displayBindings: {
 		background: true,
@@ -52,5 +55,8 @@ export const DISPLAY_UI_PARAMS = {
 	},
 	cameraBindings: {
 		camera: 'defaultCamera',
+	},
+	shareBindings: {
+		share: '',
 	},
 };

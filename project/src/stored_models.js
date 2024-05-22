@@ -126,7 +126,6 @@ function populateFiles(files) {
 		fileContainer.appendChild(contentDiv);
 		nameContainer.appendChild(fileNameLabel);
 
-
 		Object.entries(file.glb).forEach(([key, value]) => {
 			const thumbCard = document.createElement('div');
 			thumbCard.className = 'thumb-card';
@@ -134,12 +133,7 @@ function populateFiles(files) {
 
 			let thumbUrl = '';
 			if (file.thumb && file.thumb[key]) {
-				const img = createThumbnail(
-					file.thumb[key],
-					key,
-					file.original_filename,
-					value,
-				);
+				const img = createThumbnail(file.thumb[key], key, file.original_filename, value);
 				thumbCard.appendChild(img);
 			} else {
 				const loadingHolder = document.createElement('div');

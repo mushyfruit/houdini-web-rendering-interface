@@ -22,6 +22,7 @@ class SceneManager {
 		this.preRenderRegistered = false;
 
 		this.lightingBlade = null;
+		this.shareBlade = null;
 		this.currentSceneLights = null;
 		this.defaultLights = [];
 		this.isDefaultSkyboxLoaded = false;
@@ -292,19 +293,20 @@ function create_scene() {
 	// Need to attach relevant cameras or else it'll freeze the render.
 	//scene.postProcessRenderPipelineManager.attachCamerasToRenderPipeline('ssao', sceneManager.camera);
 
-
 	// Store all default lights for toggling later.
 	sceneManager.defaultLights.push(hemisphericLight);
 	sceneManager.defaultLights.forEach((light) => {
 		light.setEnabled(!globalSettings.guiParams.lightingBindings.disable_default_lighting);
-	})
+	});
 
 	return scene;
 }
 
-function setCurrentSkybox(index, setEnvironment=false) {
-	if (globalSettings.guiParams.displayBindings.background ||
-		globalSettings.guiParams.displayBindings.environment) {
+function setCurrentSkybox(index, setEnvironment = false) {
+	if (
+		globalSettings.guiParams.displayBindings.background ||
+		globalSettings.guiParams.displayBindings.environment
+	) {
 		sceneManager.handleUnfreeze();
 		if (sceneManager.skyboxMeshes[index] === undefined) {
 			sceneManager.skyboxMeshes[index] = sceneManager.scene.createDefaultSkybox(
@@ -315,7 +317,8 @@ function setCurrentSkybox(index, setEnvironment=false) {
 			);
 			sceneManager.skyboxMeshes[index].alwaysSelectAsActiveMesh = true;
 			sceneManager.skyboxMeshes[index].setEnabled(
-				globalSettings.guiParams.displayBindings.background);
+				globalSettings.guiParams.displayBindings.background,
+			);
 
 			if (setEnvironment) {
 				sceneManager.scene.environmentTexture = sceneManager.skyboxes[index];
@@ -342,8 +345,32 @@ function setCurrentSkybox(index, setEnvironment=false) {
 function onInit() {
 	prepareModelDisplay();
 	applyPreLoadSettings();
-	loadModel('placeholder.glb', [1, 240]);
+
+	// Determine if we should load from a provided shareable link.
+	const loadedFromLink = loadShareableLink();
+
+	// If there's no specific file to load, then just load the placeholder.
+	if (!loadedFromLink) {
+		loadModel('placeholder.glb', [1, 240]);
+	}
 }
+
+function loadShareableLink() {
+	const currentPath = window.location.pathname;
+	if (currentPath === '/view') {
+		const params = new URLSearchParams(window.location.search);
+		const nanoid = params.get('fileid');
+		if (!nanoid) {
+			return false;
+		}
+
+		loadModel(nanoid + '.glb', [1, 240], '/get_glb_from_nano/');
+		return true;
+	} else {
+		return false;
+	}
+}
+
 
 function applyPreLoadSettings() {
 	if (globalSettings.guiParams.displayBindings.autorotate) {
@@ -541,6 +568,55 @@ function generateSettingsPanel() {
 	// Hide by default, dynamically populating if animations are found.
 	animationFolder.hidden = true;
 	sceneManager.animationFolder = animationFolder;
+
+	const share_binding = {
+		key: 'share',
+		callbackFunc: copyLinkToClipboard,
+		options: { readonly: true },
+		pass_value: true,
+		label_value: 'shareable link',
+	};
+
+	const shareFolder = sceneManager.pane.addFolder({
+		title: 'Share Model',
+		expanded: globalSettings.guiParams.ui.share.expanded,
+	});
+	shareFolder.on('fold', (ev) => {
+		globalSettings.guiParams.ui.share.expanded = ev.expanded;
+		globalSettings.saveParams();
+	});
+
+	sceneManager.shareBlade = setupDefaultBinding(
+		globalSettings.guiParams.shareBindings,
+		shareFolder,
+		share_binding.key,
+		() => {},
+		share_binding.options || {},
+		share_binding.pass_value,
+	);
+
+	if (share_binding.label_value) {
+		sceneManager.shareBlade.label = share_binding.label_value;
+	}
+	const blade_element = sceneManager.shareBlade.element;
+	if (blade_element) {
+		blade_element.addEventListener('click', function (e) {
+			const bladeState = sceneManager.shareBlade.exportState();
+			share_binding.callbackFunc(bladeState.binding.value);
+		});
+	}
+}
+
+function copyLinkToClipboard(link_value) {
+	navigator.clipboard.writeText(link_value).then(
+		function () {
+			console.log('Copied to the clipboard.');
+			// Should display the popper after clicking.
+		},
+		function (err) {
+			console.error('Could not copy text: ', err);
+		},
+	);
 }
 
 function populateAnimationFolder(animations) {
@@ -628,7 +704,7 @@ function setSceneCamera(value) {
 }
 
 function setupDefaultBinding(settings, folder, key, callbackFunc, options, pass_value = false) {
-	const binding = folder.addBinding(settings, key, options).on('change', (ev) => {
+	const blade = folder.addBinding(settings, key, options).on('change', (ev) => {
 		if (!ev.last) return;
 		if (pass_value) {
 			callbackFunc(ev.value);
@@ -641,8 +717,10 @@ function setupDefaultBinding(settings, folder, key, callbackFunc, options, pass_
 
 	// Remove any underscores to make the labels a bit nicer.
 	if (key.includes('_')) {
-		binding.label = key.replace(/_/g, ' ');
+		blade.label = key.replace(/_/g, ' ');
 	}
+
+	return blade;
 }
 
 function rgbStringToColor3(rgbString) {
@@ -702,8 +780,10 @@ function mapRange(value, inMin, inMax, outMin, outMax) {
 }
 
 function rotateTexture() {
-	if (!globalSettings.guiParams.displayBindings.background &&
-		!globalSettings.guiParams.displayBindings.environment) {
+	if (
+		!globalSettings.guiParams.displayBindings.background &&
+		!globalSettings.guiParams.displayBindings.environment
+	) {
 		return;
 	}
 
@@ -807,9 +887,13 @@ function toggleBackground(value) {
 		adjustEnvironmentBlur(globalSettings.guiParams.lightingBindings.environment_blur);
 
 		// Ensure we set the reflection texture's rotation to the correct rotation value.
-		if (!globalSettings.guiParams.displayBindings.environment &&
-			!globalSettings.guiParams.lightingBindings.rotate_environment) {
-			adjustEnvironmentRotation(globalSettings.guiParams.lightingBindings.environment_rotation);
+		if (
+			!globalSettings.guiParams.displayBindings.environment &&
+			!globalSettings.guiParams.lightingBindings.rotate_environment
+		) {
+			adjustEnvironmentRotation(
+				globalSettings.guiParams.lightingBindings.environment_rotation,
+			);
 		}
 
 		toggleEnvironmentRotation(globalSettings.guiParams.lightingBindings.rotate_environment);
@@ -822,9 +906,13 @@ function toggleEnvironment(value) {
 		sceneManager.scene.environmentTexture = undefined;
 	} else {
 		sceneManager.scene.environmentTexture = sceneManager.skyboxes[globalSettings.lastTexture];
-		if (!globalSettings.guiParams.displayBindings.background &&
-			!globalSettings.guiParams.lightingBindings.rotate_environment) {
-			adjustEnvironmentRotation(globalSettings.guiParams.lightingBindings.environment_rotation);
+		if (
+			!globalSettings.guiParams.displayBindings.background &&
+			!globalSettings.guiParams.lightingBindings.rotate_environment
+		) {
+			adjustEnvironmentRotation(
+				globalSettings.guiParams.lightingBindings.environment_rotation,
+			);
 		}
 		toggleEnvironmentRotation(globalSettings.guiParams.lightingBindings.rotate_environment);
 	}
@@ -875,14 +963,37 @@ export function startRenderLoop() {
 	});
 }
 
+function generateShareableLink(fileName) {
+	let nanoIdPromise;
+	nanoIdPromise = fetch(`get_nano_id?filename=${encodeURIComponent(fileName)}`)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error('Network response was not ok ' + response.statusText);
+			}
+			return response.json(); // Assuming the response is in JSON format
+		})
+		.then((data) => {
+			const nanoId = data.nano_id;
+			const currentUrl = window.location.origin; // Get the current URL's origin
+			const shareableLink = `${currentUrl}/view?fileid=${nanoId}`;
+			globalSettings.guiParams.shareBindings.share = shareableLink;
+		})
+		.catch((error) => {
+			console.error('Nano ID generation failed:', error);
+		});
+}
+
 // Handle loading and clearing models.
-export function loadModel(fileName, frameRange) {
+export function loadModel(fileName, frameRange, root_url = '/get_glb/') {
 	sceneManager.handleUnfreeze(true);
 
 	clearModels();
-	BABYLON.SceneLoader.ImportMeshAsync(null, '/get_glb/', fileName, sceneManager.scene)
+	BABYLON.SceneLoader.ImportMeshAsync(null, root_url, fileName, sceneManager.scene)
 		.then((result) => {
 			console.log('GLB Loaded Successfully!');
+
+			// Retrieve the nano id shareable string.
+			generateShareableLink(fileName);
 
 			// Scene always contains default camera named "defaultCamera".
 			const hasCameras = sceneManager.scene.cameras.length > 1;
@@ -897,8 +1008,10 @@ export function loadModel(fileName, frameRange) {
 			if (hasLights) {
 				sceneManager.currentSceneLights = result.lights;
 				result.lights.forEach((light) => {
-					light.setEnabled(!globalSettings.guiParams.lightingBindings.disable_houdini_lighting)
-				})
+					light.setEnabled(
+						!globalSettings.guiParams.lightingBindings.disable_houdini_lighting,
+					);
+				});
 			} else {
 				sceneManager.clearSceneLights();
 			}
@@ -941,8 +1054,6 @@ export function loadModel(fileName, frameRange) {
 		sceneManager.isDefaultSkyboxLoaded = true;
 		applyPostLoadSkyboxSettings();
 	}
-
-
 
 	sceneManager.handleFreeze(true);
 }

@@ -60,6 +60,27 @@ def get_file_hash(hip_file, buffer_size=16384):
 
 
 @with_redis_conn
+def has_generated_nanoid(redis_conn, file_uuid):
+    stored_nanoid = redis_conn.hget("global:uuid_to_nanoid", file_uuid)
+    if stored_nanoid is not None:
+        return stored_nanoid.decode('utf-8')
+
+
+@with_redis_conn
+def get_filename_for_nanoid(redis_conn, nano_id):
+    stored_filename = redis_conn.hget("global:nanoid_to_uuid", nano_id)
+    if stored_filename is not None:
+        return stored_filename.decode('utf-8')
+
+
+@with_redis_conn
+def add_shareable_mapping(redis_conn, file_nanoid, file_uuid):
+    if not redis_conn.sismember("global:shareable_files", file_nanoid):
+        redis_conn.hset(f"global:nanoid_to_uuid", file_nanoid, file_uuid)
+        redis_conn.hset(f"global:uuid_to_nanoid", file_uuid, file_nanoid)
+
+
+@with_redis_conn
 def add_unique_filename(redis_conn, user_uuid, original_filename, file_uuid, hip_file):
     """
 

@@ -9,4 +9,9 @@ COPY . .
 RUN pip install --no-cache-dir -r requirements_app.txt
 
 # Run Flask App, binding to a Unix socket that will be used to communicate with nginx.
-CMD ["/bin/bash", "-c", "source /root/setup_hserver.sh && gunicorn --bind unix:/run/flask-socket/flask_app.sock server:app -k eventlet"]
+CMD ["/bin/bash", "-c", "source /root/setup_hserver.sh && \
+gunicorn --bind unix:/run/flask-socket/flask_app.sock server:app --log-level debug \
+    --capture-output \
+    --access-logfile - \
+    --enable-stdio-inheritance \
+    -k eventlet"]
