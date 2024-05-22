@@ -31,6 +31,7 @@ export const DISPLAY_UI_PARAMS = {
 	},
 	displayBindings: {
 		background: true,
+		environment: true,
 		wireframe: false,
 		grid: false,
 		grid_size: 8,
@@ -47,6 +48,7 @@ export const DISPLAY_UI_PARAMS = {
 		rotate_environment: false,
 		rotate_speed: 0,
 		disable_houdini_lighting: false,
+		disable_default_lighting: false,
 	},
 	cameraBindings: {
 		camera: 'defaultCamera',

@@ -176,6 +176,13 @@ export function onNodeGraphExit() {
 }
 
 export function handleDisplayModel(renderFilename = null) {
+	// If the displayModel's active class hasn't been toggled, do it now.
+	let displayModel = document.getElementById('display-model');
+	if (displayModel && !displayModel.classList.contains('active')) {
+		removeClassFromElements(getSiblings(displayModel), 'active');
+		displayModel.classList.toggle('active');
+	}
+
 	onNodeGraphExit();
 	showRenderCanvas();
 	document.querySelector('.main-body').innerHTML = '';

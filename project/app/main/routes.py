@@ -166,6 +166,8 @@ def handle_upload():
         else:
             # File has already been saved for the user. Find that and return the file uuid.
             file_uuid = redis_client.retrieve_uuid_from_filename(session["user_uuid"], file_hash)
+
+            # This can be None if the file never rendered anything, but had an entry made.
             if file_uuid is None:
                 return jsonify({"message": "File hash matched, but unable to retrieve file."}), 400
             print("Located existing file with matching hash for: {0}".format(sanitized_filename))

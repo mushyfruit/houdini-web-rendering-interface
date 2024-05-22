@@ -19,9 +19,11 @@ class SceneManager {
 		this.skyboxes = [];
 		this.skyboxMeshes = {};
 		this.skyboxValues = [];
+		this.preRenderRegistered = false;
 
 		this.lightingBlade = null;
 		this.currentSceneLights = null;
+		this.defaultLights = [];
 		this.isDefaultSkyboxLoaded = false;
 
 		this.pane = null;
@@ -259,19 +261,9 @@ class DisplaySettings {
 
 function create_scene() {
 	const scene = sceneManager.scene;
+
 	const hemisphericLight = new BABYLON.HemisphericLight('light', new BABYLON.Vector3(1, 1, 0));
 	hemisphericLight.intensity = 0.6;
-
-	const directionalLight = new BABYLON.DirectionalLight(
-		'dirLight',
-		new BABYLON.Vector3(-1, -2, -1),
-		scene,
-	);
-	directionalLight.intensity = 0;
-
-	const shadowGenerator = new BABYLON.ShadowGenerator(1024, directionalLight);
-	shadowGenerator.useExponentialShadowMap = true;
-	shadowGenerator.useKernelBlur = true;
 
 	// Tone it down a bit from the start.
 	scene.environmentIntensity = 0.4;
@@ -300,19 +292,19 @@ function create_scene() {
 	// Need to attach relevant cameras or else it'll freeze the render.
 	//scene.postProcessRenderPipelineManager.attachCamerasToRenderPipeline('ssao', sceneManager.camera);
 
-	if (globalSettings.guiParams.lightingBindings.rotate_environment) {
-		toggleEnvironmentRotation(true);
-	}
 
-	if (globalSettings.guiParams.displayBindings.autorotate) {
-		toggleAutoRotate();
-	}
+	// Store all default lights for toggling later.
+	sceneManager.defaultLights.push(hemisphericLight);
+	sceneManager.defaultLights.forEach((light) => {
+		light.setEnabled(!globalSettings.guiParams.lightingBindings.disable_default_lighting);
+	})
 
 	return scene;
 }
 
-function setCurrentSkybox(index) {
-	if (globalSettings.guiParams.displayBindings.background) {
+function setCurrentSkybox(index, setEnvironment=false) {
+	if (globalSettings.guiParams.displayBindings.background ||
+		globalSettings.guiParams.displayBindings.environment) {
 		sceneManager.handleUnfreeze();
 		if (sceneManager.skyboxMeshes[index] === undefined) {
 			sceneManager.skyboxMeshes[index] = sceneManager.scene.createDefaultSkybox(
@@ -321,16 +313,25 @@ function setCurrentSkybox(index) {
 				1000,
 				globalSettings.guiParams.lightingBindings.environment_blur,
 			);
-
 			sceneManager.skyboxMeshes[index].alwaysSelectAsActiveMesh = true;
-			sceneManager.scene.environmentTexture = sceneManager.skyboxes[index];
+			sceneManager.skyboxMeshes[index].setEnabled(
+				globalSettings.guiParams.displayBindings.background);
+
+			if (setEnvironment) {
+				sceneManager.scene.environmentTexture = sceneManager.skyboxes[index];
+			}
 		} else {
-			sceneManager.scene.environmentTexture = sceneManager.skyboxes[index];
+			if (setEnvironment) {
+				sceneManager.scene.environmentTexture = sceneManager.skyboxes[index];
+			}
 		}
+
 		// Disable all other skyboxes.
-		Object.keys(sceneManager.skyboxMeshes).forEach((meshIndex) => {
-			sceneManager.skyboxMeshes[meshIndex].setEnabled(parseInt(meshIndex) === index);
-		});
+		if (globalSettings.guiParams.displayBindings.background) {
+			Object.keys(sceneManager.skyboxMeshes).forEach((meshIndex) => {
+				sceneManager.skyboxMeshes[meshIndex].setEnabled(parseInt(meshIndex) === index);
+			});
+		}
 
 		sceneManager.handleFreeze();
 	} else {
@@ -340,7 +341,24 @@ function setCurrentSkybox(index) {
 
 function onInit() {
 	prepareModelDisplay();
+	applyPreLoadSettings();
 	loadModel('placeholder.glb', [1, 240]);
+}
+
+function applyPreLoadSettings() {
+	if (globalSettings.guiParams.displayBindings.autorotate) {
+		toggleAutoRotate();
+	}
+}
+
+function applyPostLoadSkyboxSettings() {
+	if (globalSettings.guiParams.lightingBindings.rotate_environment) {
+		toggleEnvironmentRotation(true);
+	}
+
+	if (globalSettings.guiParams.displayBindings.environment) {
+		toggleEnvironment(true);
+	}
 }
 
 export function prepareModelDisplay() {
@@ -379,7 +397,8 @@ function generateSettingsPanel() {
 	});
 
 	const display_bindings = [
-		{ key: 'background', callbackFunc: toggleBackground, pass_value: false },
+		{ key: 'background', callbackFunc: toggleBackground, pass_value: true },
+		{ key: 'environment', callbackFunc: toggleEnvironment, pass_value: true },
 		{ key: 'wireframe', callbackFunc: toggleWireframe, pass_value: true },
 		{ key: 'grid', callbackFunc: toggleGrid, pass_value: true },
 		{
@@ -436,6 +455,7 @@ function generateSettingsPanel() {
 			pass_value: true,
 		},
 		{ key: 'disable_houdini_lighting', callbackFunc: toggleHoudiniLights, pass_value: true },
+		{ key: 'disable_default_lighting', callbackFunc: toggleDefaultLights, pass_value: true },
 	];
 
 	const lightingFolder = sceneManager.pane.addFolder({
@@ -571,18 +591,29 @@ function toggleHoudiniLights(value) {
 	}
 }
 
+function toggleDefaultLights(value) {
+	if (sceneManager.defaultLights) {
+		sceneManager.handleUnfreeze();
+		sceneManager.defaultLights.forEach((light) => {
+			light.setEnabled(!value);
+		});
+		sceneManager.handleFreeze();
+	}
+}
+
 function setBackgroundTexture(value) {
 	const skyboxValues = Object.values(DEFAULT_SKYBOXES);
 	const selectedIndex = skyboxValues.indexOf(value);
 
 	if (selectedIndex === -1) {
 		// Something went wrong, just fallback.
-		setCurrentSkybox(0);
+		setCurrentSkybox(0, true);
 		globalSettings.lastTexture = 0;
 		console.error(`Unable to find environment: ${value}`);
 	} else {
 		globalSettings.lastTexture = selectedIndex;
-		setCurrentSkybox(selectedIndex);
+		setCurrentSkybox(selectedIndex, true);
+		adjustEnvironmentBlur(globalSettings.guiParams.lightingBindings.environment_blur);
 	}
 	globalSettings.saveParams();
 }
@@ -631,23 +662,38 @@ function adjustExposure(value) {
 
 function adjustEnvironmentBlur(value) {
 	const currentMesh = sceneManager.skyboxMeshes[globalSettings.lastTexture];
-	currentMesh.material.microSurface = 1 - value;
+	if (currentMesh) {
+		currentMesh.material.microSurface = 1 - value;
+	}
 }
 
 function adjustEnvironmentRotation(value) {
 	const currentMesh = sceneManager.skyboxMeshes[globalSettings.lastTexture];
+	if (!currentMesh && !sceneManager.scene.environmentTexture) {
+		return;
+	}
 	const rotMatrix = BABYLON.Matrix.RotationY(BABYLON.Tools.ToRadians(value));
-	sceneManager.scene.environmentTexture.setReflectionTextureMatrix(rotMatrix);
-	currentMesh.material.reflectionTexture.setReflectionTextureMatrix(rotMatrix);
+
+	if (currentMesh) {
+		currentMesh.material.reflectionTexture.setReflectionTextureMatrix(rotMatrix);
+	}
+
+	if (sceneManager.scene.environmentTexture) {
+		sceneManager.scene.environmentTexture.setReflectionTextureMatrix(rotMatrix);
+	}
 }
 
 function toggleEnvironmentRotation(value) {
 	if (value) {
-		if (sceneManager.scene.environmentTexture) {
+		if (!sceneManager.preRenderRegistered) {
 			sceneManager.scene.registerBeforeRender(rotateTexture);
+			sceneManager.preRenderRegistered = true;
 		}
 	} else {
-		sceneManager.scene.unregisterBeforeRender(rotateTexture);
+		if (sceneManager.preRenderRegistered) {
+			sceneManager.scene.unregisterBeforeRender(rotateTexture);
+			sceneManager.preRenderRegistered = false;
+		}
 	}
 }
 
@@ -656,18 +702,36 @@ function mapRange(value, inMin, inMax, outMin, outMax) {
 }
 
 function rotateTexture() {
-	if (!sceneManager.scene.environmentTexture) {
+	if (!globalSettings.guiParams.displayBindings.background &&
+		!globalSettings.guiParams.displayBindings.environment) {
 		return;
 	}
+
+	if (globalSettings.guiParams.lightingBindings.rotate_speed === 0) {
+		return;
+	}
+
 	const currentMesh = sceneManager.skyboxMeshes[globalSettings.lastTexture];
-	const matrix = currentMesh.material.reflectionTexture.getReflectionTextureMatrix();
+
+	let matrix;
+	if (currentMesh) {
+		matrix = currentMesh.material.reflectionTexture.getReflectionTextureMatrix();
+	} else {
+		matrix = sceneManager.scene.environmentTexture.getReflectionTextureMatrix();
+	}
 	const theta = Math.atan2(matrix.m[8], matrix.m[10]);
 	const angle = BABYLON.Tools.ToDegrees(theta);
 
 	const perFrame = mapRange(globalSettings.guiParams.lightingBindings.rotate_speed, 0, 100, 0, 2);
 	const rotMatrix = BABYLON.Matrix.RotationY(BABYLON.Tools.ToRadians(angle + perFrame));
-	sceneManager.scene.environmentTexture.setReflectionTextureMatrix(rotMatrix);
-	currentMesh.material.reflectionTexture.setReflectionTextureMatrix(rotMatrix);
+
+	if (currentMesh) {
+		currentMesh.material.reflectionTexture.setReflectionTextureMatrix(rotMatrix);
+	}
+
+	if (sceneManager.scene.environmentTexture) {
+		sceneManager.scene.environmentTexture.setReflectionTextureMatrix(rotMatrix);
+	}
 }
 
 function toggleGrid(value) {
@@ -732,17 +796,39 @@ function adjustAutoRotateSpeed(value) {
 	}
 }
 
-function toggleBackground() {
-	if (sceneManager.scene.environmentTexture) {
+function toggleBackground(value) {
+	if (!value) {
 		sceneManager.handleUnfreeze();
 		const mesh = sceneManager.skyboxMeshes[globalSettings.lastTexture];
 		mesh.setEnabled(false);
-		sceneManager.scene.environmentTexture = undefined;
 		sceneManager.handleFreeze();
 	} else {
-		setCurrentSkybox(globalSettings.lastTexture);
-		sceneManager.scene.environmentTexture = sceneManager.skyboxes[globalSettings.lastTexture];
+		setCurrentSkybox(globalSettings.lastTexture, false);
+		adjustEnvironmentBlur(globalSettings.guiParams.lightingBindings.environment_blur);
+
+		// Ensure we set the reflection texture's rotation to the correct rotation value.
+		if (!globalSettings.guiParams.displayBindings.environment &&
+			!globalSettings.guiParams.lightingBindings.rotate_environment) {
+			adjustEnvironmentRotation(globalSettings.guiParams.lightingBindings.environment_rotation);
+		}
+
+		toggleEnvironmentRotation(globalSettings.guiParams.lightingBindings.rotate_environment);
 	}
+}
+
+function toggleEnvironment(value) {
+	sceneManager.handleUnfreeze();
+	if (!value) {
+		sceneManager.scene.environmentTexture = undefined;
+	} else {
+		sceneManager.scene.environmentTexture = sceneManager.skyboxes[globalSettings.lastTexture];
+		if (!globalSettings.guiParams.displayBindings.background &&
+			!globalSettings.guiParams.lightingBindings.rotate_environment) {
+			adjustEnvironmentRotation(globalSettings.guiParams.lightingBindings.environment_rotation);
+		}
+		toggleEnvironmentRotation(globalSettings.guiParams.lightingBindings.rotate_environment);
+	}
+	sceneManager.handleFreeze();
 }
 
 function toggleWireframe(value) {
@@ -810,6 +896,9 @@ export function loadModel(fileName, frameRange) {
 			sceneManager.toggleLightBlade(hasLights);
 			if (hasLights) {
 				sceneManager.currentSceneLights = result.lights;
+				result.lights.forEach((light) => {
+					light.setEnabled(!globalSettings.guiParams.lightingBindings.disable_houdini_lighting)
+				})
 			} else {
 				sceneManager.clearSceneLights();
 			}
@@ -850,7 +939,10 @@ export function loadModel(fileName, frameRange) {
 	if (!sceneManager.isDefaultSkyboxLoaded) {
 		setBackgroundTexture(globalSettings.guiParams.lightingBindings.environment);
 		sceneManager.isDefaultSkyboxLoaded = true;
+		applyPostLoadSkyboxSettings();
 	}
+
+
 
 	sceneManager.handleFreeze(true);
 }
@@ -859,7 +951,6 @@ function clearModels() {
 	// Dispose of any meshes previously loaded.
 	sceneManager.scene.meshes.forEach((mesh) => {
 		if (mesh.metadata && mesh.metadata.imported) {
-			console.log(`Deleting ${mesh.name}`);
 			mesh.dispose();
 		}
 	});

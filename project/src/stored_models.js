@@ -101,6 +101,10 @@ function populateFiles(files) {
 	container.innerHTML = '';
 
 	files.forEach((file) => {
+		if (!file.glb) {
+			return;
+		}
+
 		const fileContainer = document.createElement('div');
 		fileContainer.className = 'file-container';
 		fileContainer.setAttribute('file-uuid', file.file_uuid);
@@ -122,91 +126,90 @@ function populateFiles(files) {
 		fileContainer.appendChild(contentDiv);
 		nameContainer.appendChild(fileNameLabel);
 
-		if (file.glb) {
-			Object.entries(file.glb).forEach(([key, value]) => {
-				const thumbCard = document.createElement('div');
-				thumbCard.className = 'thumb-card';
-				thumbCard.setAttribute('data-node-path', key);
 
-				let thumbUrl = '';
-				if (file.thumb && file.thumb[key]) {
-					const img = createThumbnail(
-						file.thumb[key],
-						key,
-						file.original_filename,
-						value,
-					);
-					thumbCard.appendChild(img);
-				} else {
-					const loadingHolder = document.createElement('div');
-					loadingHolder.className = 'animation-holder';
-					loadingHolder.setAttribute('data-node-path', key);
-					loadingHolder.setAttribute('glb-path', value);
+		Object.entries(file.glb).forEach(([key, value]) => {
+			const thumbCard = document.createElement('div');
+			thumbCard.className = 'thumb-card';
+			thumbCard.setAttribute('data-node-path', key);
 
-					const loadingIndicator = document.createElement('div');
-					loadingIndicator.className = 'loader_animation';
+			let thumbUrl = '';
+			if (file.thumb && file.thumb[key]) {
+				const img = createThumbnail(
+					file.thumb[key],
+					key,
+					file.original_filename,
+					value,
+				);
+				thumbCard.appendChild(img);
+			} else {
+				const loadingHolder = document.createElement('div');
+				loadingHolder.className = 'animation-holder';
+				loadingHolder.setAttribute('data-node-path', key);
+				loadingHolder.setAttribute('glb-path', value);
 
-					loadingHolder.appendChild(loadingIndicator);
-					thumbCard.appendChild(loadingHolder);
-				}
+				const loadingIndicator = document.createElement('div');
+				loadingIndicator.className = 'loader_animation';
 
-				const cardBody = document.createElement('div');
-				cardBody.className = 'model-card-body';
+				loadingHolder.appendChild(loadingIndicator);
+				thumbCard.appendChild(loadingHolder);
+			}
 
-				const cardTitle = document.createElement('h6');
-				cardTitle.className = 'card-title';
-				cardTitle.innerText = key;
+			const cardBody = document.createElement('div');
+			cardBody.className = 'model-card-body';
 
-				const cardText = document.createElement('p');
-				if (file.render_time && file.render_time[key]) {
-					const utcTimeString = file.render_time[key];
-					// Python datetime doesn't support 'Z' suffix, add it here.
-					const date = new Date(utcTimeString + (utcTimeString.endsWith('Z') ? '' : 'Z'));
+			const cardTitle = document.createElement('h6');
+			cardTitle.className = 'card-title';
+			cardTitle.innerText = key;
 
-					const readableDate = date.toLocaleDateString('en-US', {
-						year: 'numeric',
-						month: 'long',
-						day: 'numeric',
-					});
-					const readableTime = date.toLocaleTimeString('en-US', {
-						hour: '2-digit',
-						minute: '2-digit',
-						hour12: true,
-					});
-					const formattedDateTime = `${readableDate} at ${readableTime}`;
-					cardText.innerText = formattedDateTime;
-				} else {
-					cardText.innerText = '';
-				}
+			const cardText = document.createElement('p');
+			if (file.render_time && file.render_time[key]) {
+				const utcTimeString = file.render_time[key];
+				// Python datetime doesn't support 'Z' suffix, add it here.
+				const date = new Date(utcTimeString + (utcTimeString.endsWith('Z') ? '' : 'Z'));
 
-				const frameRangeInfo = document.createElement('p');
-				if (file.frame_range && file.frame_range[key]) {
-					let frameRangeParts = file.frame_range[key].split('-');
-
-					let frameRangeDisplay;
-					if (frameRangeParts.length == 2) {
-						frameRangeDisplay = `<b>Frame Range:</b> ${frameRangeParts[0]} to ${frameRangeParts[1]}`;
-					} else if (frameRangeParts.length == 1) {
-						frameRangeDisplay = `<b>Frame:</b> ${frameRangeParts[0]}`;
-					} else {
-						frameRangeDisplay = `<b>Unknown Frame Data:</b> ${frameRangeString}`;
-					}
-					frameRangeInfo.innerHTML = frameRangeDisplay;
-				} else {
-					frameRangeInfo.innerHTML = '';
-				}
-
-				cardBody.appendChild(cardTitle);
-				cardBody.appendChild(cardText);
-				cardBody.appendChild(frameRangeInfo);
-				thumbCard.appendChild(cardBody);
-				contentDiv.appendChild(thumbCard);
-
-				window.requestAnimationFrame(() => {
-					adjustCardTitleToContainer(cardTitle);
+				const readableDate = date.toLocaleDateString('en-US', {
+					year: 'numeric',
+					month: 'long',
+					day: 'numeric',
 				});
+				const readableTime = date.toLocaleTimeString('en-US', {
+					hour: '2-digit',
+					minute: '2-digit',
+					hour12: true,
+				});
+				const formattedDateTime = `${readableDate} at ${readableTime}`;
+				cardText.innerText = formattedDateTime;
+			} else {
+				cardText.innerText = '';
+			}
+
+			const frameRangeInfo = document.createElement('p');
+			if (file.frame_range && file.frame_range[key]) {
+				let frameRangeParts = file.frame_range[key].split('-');
+
+				let frameRangeDisplay;
+				if (frameRangeParts.length == 2) {
+					frameRangeDisplay = `<b>Frame Range:</b> ${frameRangeParts[0]} to ${frameRangeParts[1]}`;
+				} else if (frameRangeParts.length == 1) {
+					frameRangeDisplay = `<b>Frame:</b> ${frameRangeParts[0]}`;
+				} else {
+					frameRangeDisplay = `<b>Unknown Frame Data:</b> ${frameRangeString}`;
+				}
+				frameRangeInfo.innerHTML = frameRangeDisplay;
+			} else {
+				frameRangeInfo.innerHTML = '';
+			}
+
+			cardBody.appendChild(cardTitle);
+			cardBody.appendChild(cardText);
+			cardBody.appendChild(frameRangeInfo);
+			thumbCard.appendChild(cardBody);
+			contentDiv.appendChild(thumbCard);
+
+			window.requestAnimationFrame(() => {
+				adjustCardTitleToContainer(cardTitle);
 			});
-		}
+		});
 
 		const infoDiv = document.createElement('div');
 		infoDiv.className = 'stored-model-info';
