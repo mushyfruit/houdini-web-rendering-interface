@@ -67,7 +67,7 @@ body {
 }
 
 .tp-lblv_v {
-  min-width: 180px;
+    min-width: 180px;
 }
 
 .sidebar {
@@ -97,7 +97,7 @@ body {
     justify-content: center;
 }
 
-.user-img{
+.user-img {
     width: 44px;
     height: 44px;
     border-radius: 50%;
@@ -120,18 +120,18 @@ body {
     flex: 1;
 }
 
-.user-details .name{
+.user-details .name {
     font-size: 15px;
     font-weight: 500px;
 }
 
-.menu ul li{
+.menu ul li {
     position: relative;
     list-style: none;
     margin-bottom: 5px;
 }
 
-.menu ul li a{
+.menu ul li a {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -145,7 +145,7 @@ body {
 }
 
 .menu ul li > a:hover,
-.menu ul li.active a{
+.menu ul li.active a {
     color: #000;
     background-color: #f6f6f6;
 }
@@ -174,7 +174,7 @@ body {
     border-bottom: 2px solid #f6f6f6;
 }
 
-.menu-btn{
+.menu-btn {
     position: absolute;
     right: -14px;
     top: 3.5%;
@@ -194,23 +194,23 @@ body {
     color: #000;
 }
 
-.menu-btn i{
+.menu-btn i {
     transition: all 0.3s;
 }
 
-.sidebar.active{
+.sidebar.active {
     width: 92px;
 }
 
-.sidebar.file-upload{
+.sidebar.file-upload {
     width: 385px;
 }
 
-.sidebar.active .menu-btn i{
+.sidebar.active .menu-btn i {
     transform: rotate(180deg);
 }
 
-.sidebar.active .user-details{
+.sidebar.active .user-details {
     display: none;
 }
 
@@ -229,7 +229,7 @@ body {
     justify-content: center;
 }
 
-.sidebar.active .menu > ul > li > a .text{
+.sidebar.active .menu > ul > li > a .text {
     position: absolute;
     left: 70px;
     top: 50%;
@@ -242,7 +242,7 @@ body {
     transition: left 0.3s;
 }
 
-.sidebar.active .menu > ul > li > a .text::after{
+.sidebar.active .menu > ul > li > a .text::after {
     content: "";
     position: absolute;
     left: -5px;
@@ -255,13 +255,13 @@ body {
     z-index: -1;
 }
 
-.sidebar.active .menu > ul > li > a:hover .text{
+.sidebar.active .menu > ul > li > a:hover .text {
     left: 50px;
     opacity: 1;
     visibility: visible;
 }
 
-.sidebar.active .menu .sub-menu{
+.sidebar.active .menu .sub-menu {
     position: absolute;
     top: 0;
     left: 20px;
@@ -273,7 +273,7 @@ body {
     box-shadow: 0px 10px 8px rgba(0, 0, 0, 0.1);
 }
 
-.menu .sub-menu{
+.menu .sub-menu {
     overflow: hidden;
     margin-left: 20px;
     padding-left: 20px;
@@ -282,7 +282,7 @@ body {
     transition: height 0.5s ease-in-out;
 }
 
-.menu .sub-menu li a{
+.menu .sub-menu li a {
     padding: 10px 8px;
     font-size: 12px;
 }
@@ -368,12 +368,12 @@ body {
     z-index: 1000;
     border: none;
     clip-path: polygon(
-        calc(100% - 10px) 0%,
-        100% 50%,
-        calc(100% - 10px) 100%,
-        0% 100%,
-        10px 50%,
-        0% 0%
+            calc(100% - 10px) 0%,
+            100% 50%,
+            calc(100% - 10px) 100%,
+            0% 100%,
+            10px 50%,
+            0% 0%
     );
     transition: all 0.2s ease;
     background: white;
@@ -384,12 +384,12 @@ body {
     padding-left: 22px;
     transform: translateX(0px);
     clip-path: polygon(
-        calc(100% - 10px) 0%,
-        100% 50%,
-        calc(100% - 10px) 100%,
-        0% 100%,
-        0 50%,
-        0% 0%
+            calc(100% - 10px) 0%,
+            100% 50%,
+            calc(100% - 10px) 100%,
+            0% 100%,
+            0 50%,
+            0% 0%
     );
 }
 
@@ -407,12 +407,12 @@ body {
     width: 14px;
     background: gold;
     clip-path: polygon(
-        calc(100% - 10px) 0%, 
-        100% 50%, 
-        calc(100% - 10px) 100%, 
-        0% 100%, 
-        10px 50%, 
-        0% 0%
+            calc(100% - 10px) 0%,
+            100% 50%,
+            calc(100% - 10px) 100%,
+            0% 100%,
+            10px 50%,
+            0% 0%
     );
     z-index: 1;
 }
@@ -473,7 +473,7 @@ div[id$="_popper"][data-show] {
     width: auto;
 }
 
-#popper-node-context{
+#popper-node-context {
     margin-top: 2px;
     color: grey;
     font-size: 12px;
@@ -530,13 +530,13 @@ div[id$="_popper"][data-show] {
 Drop the spinner on number input */
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
+    -webkit-appearance: none;
+    margin: 0;
 }
 
 /* Firefox */
 input[type=number] {
-  -moz-appearance: textfield;
+    -moz-appearance: textfield;
 }
 
 .frame-input {
@@ -571,7 +571,7 @@ label[for="start-frame"] {
     padding: 10px 20px;
     font-size: 16px;
     font-weight: 600;
-    border-radius: 5px; 
+    border-radius: 5px;
     transition: all 0.3s ease-in-out;
     cursor: pointer;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
@@ -645,8 +645,12 @@ label[for="start-frame"] {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 #models-container {
@@ -672,7 +676,7 @@ label[for="start-frame"] {
     border-radius: 8px;
     padding: 8px 16px;
     margin: 10px 0;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     font-size: 16px;
     width: 90%;
     max-width: 400px;
@@ -716,7 +720,7 @@ label[for="start-frame"] {
 
 .thumb-card:hover .model-img {
     filter: brightness(70%);
-    box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
+    box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
     cursor: pointer;
 }
 
@@ -780,12 +784,12 @@ label[for="start-frame"] {
 }
 
 .help-align-left {
-  text-align: left;
+    text-align: left;
 }
 
 .help-align-center-small {
-  text-align: center;
-  font-size: 0.875em;
+    text-align: center;
+    font-size: 0.875em;
 }
 
 .help-list {
@@ -805,4 +809,38 @@ label[for="start-frame"] {
 .larger-help-icon {
     font-size: 1.5em;
     vertical-align: middle;
+}
+
+.copy-tooltip {
+    background-color: black;
+    color: white;
+    padding: 5px;
+    font-size: 12px;
+    border-radius: 5px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    position: absolute;
+    z-index: 1000;
+}
+
+.copy-tooltip.show {
+    opacity: 1;
+}
+
+#arrow,
+#arrow::before {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: inherit;
+}
+
+#arrow {
+    visibility: hidden;
+}
+
+#arrow::before {
+    visibility: visible;
+    content: '';
+    transform: rotate(45deg);
 }

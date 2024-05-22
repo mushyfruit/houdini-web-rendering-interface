@@ -1,6 +1,7 @@
 import * as BABYLON from '@babylonjs/core';
 import { GridMaterial } from '@babylonjs/materials';
 import { Pane } from 'tweakpane';
+import { createPopper } from '@popperjs/core';
 import { DISPLAY_UI_PARAMS, DEFAULT_SKYBOXES, DEFAULT_CAMERA_OPTION } from './constants';
 
 // Must specify the loader as suffix here.
@@ -371,7 +372,6 @@ function loadShareableLink() {
 	}
 }
 
-
 function applyPreLoadSettings() {
 	if (globalSettings.guiParams.displayBindings.autorotate) {
 		toggleAutoRotate();
@@ -611,12 +611,54 @@ function copyLinkToClipboard(link_value) {
 	navigator.clipboard.writeText(link_value).then(
 		function () {
 			console.log('Copied to the clipboard.');
-			// Should display the popper after clicking.
+			showCopiedPopper();
 		},
 		function (err) {
 			console.error('Could not copy text: ', err);
 		},
 	);
+}
+
+function showCopiedPopper() {
+	const blade_element = sceneManager.shareBlade.element;
+	const blade_sub_element = blade_element.querySelector('.tp-lblv_v');
+
+	const tooltip = document.createElement('div');
+	tooltip.className = 'copy-tooltip';
+	tooltip.textContent = 'Copied to Clipboard!';
+
+	const arrow = document.createElement('div');
+	arrow.id = 'arrow';
+	arrow.setAttribute('data-popper-arrow', '');
+	tooltip.appendChild(arrow);
+
+	document.body.appendChild(tooltip);
+	const popperInstance = createPopper(blade_sub_element, tooltip, {
+		placement: 'top',
+		modifiers: [
+			{
+				name: 'offset',
+				options: {
+					offset: [0, 8],
+				},
+			},
+			{
+				name: 'arrow',
+				options: {
+					element: arrow,
+					padding: ({ popper }) => popper.width / 2 - arrow.offsetWidth / 2,
+				},
+			},
+		],
+	});
+
+	tooltip.classList.add('show');
+
+	setTimeout(() => {
+		tooltip.classList.remove('show');
+		popperInstance.destroy();
+		document.body.removeChild(tooltip);
+	}, 1000);
 }
 
 function populateAnimationFolder(animations) {
