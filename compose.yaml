@@ -2,7 +2,7 @@ services:
   houdini_base:
     build:
       context: .
-      dockerfile: Dockerfile.houdini
+      dockerfile: docker/Dockerfile.houdini
       args:
         DOWNLOAD_HOUDINI: "false"
         SIDEFX_CLIENT: "${SIDEFX_CLIENT}"
@@ -16,7 +16,7 @@ services:
   hou_flask_app:
     build:
       context: .
-      dockerfile: Dockerfile.flask
+      dockerfile: docker/Dockerfile.flask
     image: flask_app_image
     container_name: flask_container
     ports:
@@ -39,7 +39,7 @@ services:
   celery:
     build:
         context: .
-        dockerfile: Dockerfile.celery
+        dockerfile: docker/Dockerfile.celery
     volumes:
       - ./project:/root/hou_webserver
       - shared_hip_storage:/root/hip_storage
@@ -52,7 +52,7 @@ services:
   nginx:
     build:
       context: .
-      dockerfile: Dockerfile.nginx
+      dockerfile: docker/Dockerfile.nginx
     container_name: nginx_proxy
     ports:
       - "80:80"

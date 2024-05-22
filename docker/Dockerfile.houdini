@@ -10,7 +10,7 @@ RUN mkdir /houdini && \
         echo "Downloading houdini..." && \
         pip install --upgrade --no-cache-dir -r houdini_install/requirements_hou.txt && \
         # Set the PYTHONPATH environment variable to include the hinstall directory
-        python3 houdini_install/hou_install.py; \
+        python3 houdini_install/scripts/hou_install.py; \
     else \
         echo "Skipping Houdini download and copying from default location." && \
         cp -r ./houdini_install/hou_download/build /houdini/build; \
@@ -37,7 +37,7 @@ RUN rm -r /houdiniInstaller
 FROM python:3.9-slim-buster
 COPY --from=houdini-install / /
 
-COPY setup_hserver.sh /root/
+COPY scripts/setup_hserver.sh /root/
 RUN touch /usr/lib/sesi/licenses && \
     chmod +x /root/setup_hserver.sh
 

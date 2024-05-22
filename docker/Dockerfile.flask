@@ -1,6 +1,6 @@
 FROM houdini-base
 
-COPY setup_hserver.sh /root/
+COPY scripts/setup_hserver.sh /root/
 RUN chmod +x /root/setup_hserver.sh
 
 COPY . .

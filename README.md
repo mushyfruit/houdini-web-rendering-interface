@@ -1,35 +1,26 @@
 # Houdini Web Rendering App
-Started out as a simple exploration of the `hwebserver` module and quickly expanded beyond that.
 
-Continuing to develop this in my spare time.
-
-Attempts to create a user-friendly web interface combining `BabylonJS`, `CytoscapeJS`, and
-the houdini python API. Allows for upload, examination, rendering, and display of nodes
+A user-friendly web interface combining `BabylonJS`, `CytoscapeJS`, and
+the Houdini Python API. Allows for upload, examination, rendering, and display of nodes
 within a .hip file all through a web interface.
 
-# Setup Instruction
+# Quick Start Guide
 
-1. Set up login-based licensing and get your API key.
-2. Run `pip install requirements_hou.txt` for the installation dependencies.
-3. Run the `hou_install` script to download the tar.gz file for your version of Houdini.
-4. Create a `.env` file with the following keys: (SIDEFX_CLIENT, SIDEFX_SECRET)
-5. `docker compose build` to build the docker containers.
-(Temporary local development workflow)
-6. `docker compose up -d` to start docker containers in background.
-7. `docker exec -it hou_container_local bash`
-8. `source ../setup_hserver.sh`
-9. `flask run --host 0.0.0.0 --port 8080`
+1. Set up API-Key licensing.
+   - Generate a "Client ID" and "Client Secret" following these [steps](https://www.sidefx.com/docs/api/credentials/index.html).
+   - These variables will be used for [login licensing](https://www.sidefx.com/docs/houdini/ref/utils/hkey.html#api_key_licensing) without requiring the user to login.
+2. Create a `.env` file with the following keys:
 
-## Getting the API Key
-
-Using Login-based licensing:
-https://www.sidefx.com/faq/question/how-do-i-setup-api-key-licensing/
-
-Create a .env file and add the following:
 
     SIDEFX_CLIENT="YOUR_CLIENT_ID_HERE"
     SIDEFX_SECRET="YOUR_SECRET_HERE"
-    HFS_VER="VERSION_HERE"
+    HFS_VER="TARGET_HOUDINI_VERSION_HERE"
+
+3. Download [Docker](https://docs.docker.com/get-docker/), a platform for developing and shipping applications.
+4. Once you've download Docker and setup your account, run `docker compose build` to build the app's docker images.
+   - If you encounter the following issue when building: `Error getting credentials`, you may need to run `docker login`.
+5. `docker compose up` to start the Houdini Web Rendering App.
+6. You can now access the Houdini Web Server at your local IP address.
 
 ## Download desired version of Houdini
 
@@ -39,11 +30,3 @@ Run the Houdini Install script located in the directory.
 - Extract the .tar.gz file and create a build directory for the Dockerfile.
 
     python3 hou_install.py {HOUDINI_VERSION >=20.0}
-
-## Docker
-
-    pip install -r requirements_hou.txt
-
-## Pull the redis container
-    
-    docker pull redis
