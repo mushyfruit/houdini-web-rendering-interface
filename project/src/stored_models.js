@@ -83,13 +83,24 @@ export async function handleStoredModels() {
 				throw new Error(`Failed to load the node graph, status: ${response.status}`);
 			}
 			const data = await response.json();
-			populateFiles(data.model_data);
+
+			if (data.model_data) {
+				populateFiles(data.model_data);
+			} else {
+				console.log(data.message);
+				handleEmptyModelData();
+			}
 		} catch (error) {
 			console.error('Error fetching stored models:', error.message);
 		}
 	} else {
 		console.log('No user UUID found in localStorage.');
 	}
+}
+
+function handleEmptyModelData() {
+	// TODO Indicate no valid renders were found.
+	console.log("No valid renders found for user.")
 }
 
 function populateFiles(files) {

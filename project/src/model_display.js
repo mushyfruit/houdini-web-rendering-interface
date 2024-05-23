@@ -621,7 +621,8 @@ function generateSettingsPanel() {
 }
 
 function copyLinkToClipboard(link_value) {
-	navigator.clipboard.writeText(link_value).then(
+	if (navigator.clipboard) {
+		navigator.clipboard.writeText(link_value).then(
 		function () {
 			showCopiedPopper();
 		},
@@ -629,6 +630,22 @@ function copyLinkToClipboard(link_value) {
 			console.error('Could not copy text: ', err);
 		},
 	);
+	} else {
+		fallbackCopy(link_value);
+	}
+}
+
+function fallbackCopy(textToCopy) {
+	const textarea = document.createElement('textarea');
+	textarea.value = textToCopy;
+	document.body.appendChild(textarea);
+	textarea.select();
+	try {
+		document.execCommand('copy');
+		showCopiedPopper();
+	} catch (err) {
+	}
+	document.body.removeChild(textarea);
 }
 
 function showCopiedPopper() {

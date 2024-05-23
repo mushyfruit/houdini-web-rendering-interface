@@ -74,6 +74,9 @@ def get_file_uuid_from_nano():
     if not nano_id:
         return jsonify({"message": "No valid nano id was passed."}), 400
 
+    if nano_id == current_app.config["PLACEHOLDER_FILE"]:
+        return jsonify({'file_uuid': current_app.config["PLACEHOLDER_FILE"]}), 200
+
     # Find the associated file uuid mapped to the nano id.
     filename = retrieve_file_from_nano_id(nano_id, redirect_request=False)
     if filename is None:
@@ -231,9 +234,9 @@ def retrieve_stored_models():
 
     stored_model_data = redis_client.get_user_uploaded_file_dicts(user_uuid)
     if stored_model_data:
-        return jsonify({'model_data': stored_model_data})
+        return jsonify({'model_data': stored_model_data}), 200
     else:
-        return jsonify({"message": "Invalid model data. Specify a key."}), 400
+        return jsonify({"message": "Empty model data! No associated user renders."}), 200
 
 
 @bp.route('/get_hip_name_from_nano_id', methods=['GET'])
