@@ -127,13 +127,6 @@ def handle_render_completion(message_data):
                                    render_completion_data["render_node_path"],
                                    formatted_frame_string)
 
-    # TODO
-    print({
-        'hipFile': render_completion_data["file_uuid"],
-        'fileName': filename,
-        'nodePath': render_completion_data["render_node_path"]
-    })
-
     render_completion_dict = {
         'hipFile': render_completion_data["file_uuid"],
         'fileName': filename,

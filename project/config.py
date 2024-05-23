@@ -19,6 +19,8 @@ class Config(object):
     # Default .glb file to load upon loading site.
     PLACEHOLDER_DIR = "placeholder"
     PLACEHOLDER_FILE = "placeholder.glb"
+    PLACEHOLDER_HIP = "placeholder.hiplc"
+    PLACEHOLDER_HIP_PATH = f"{STATIC_FOLDER}/{PLACEHOLDER_DIR}/{PLACEHOLDER_HIP}"
 
     THUMBNAIL_DIR = "user_thumbnails"
     MODEL_DIR = "user_models"

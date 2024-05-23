@@ -1,6 +1,7 @@
 import * as BABYLON from '@babylonjs/core';
 import { GridMaterial } from '@babylonjs/materials';
 import { Pane } from 'tweakpane';
+import { restoreNodeGraphState, nodeGraphManager } from './node_graph';
 import { createPopper } from '@popperjs/core';
 import {
 	DISPLAY_UI_PARAMS,
@@ -348,20 +349,23 @@ function setCurrentSkybox(index, setEnvironment = false) {
 	}
 }
 
-function onInit() {
+async function onInit() {
 	prepareModelDisplay();
 	applyPreLoadSettings();
 
 	// Determine if we should load from a provided shareable link.
-	const loadedFromLink = loadShareableLink();
+	const loadedFromLink = await loadShareableLink();
 
 	// If there's no specific file to load, then just load the placeholder.
 	if (!loadedFromLink) {
 		loadModel('placeholder.glb', [1, 240], '/static/placeholder/');
+
+		// Have the Node Graph display our placeholder hip by default.
+		nodeGraphManager.setFileUUID('placeholder');
 	}
 }
 
-function loadShareableLink() {
+async function loadShareableLink() {
 	const currentPath = window.location.pathname;
 	if (currentPath === '/view') {
 		const params = new URLSearchParams(window.location.search);
@@ -371,6 +375,10 @@ function loadShareableLink() {
 		}
 
 		loadModel(nanoid + '.glb', [1, 240], '/get_glb_from_nano/');
+
+		// Restore the Node Graph state object based on the loaded file.
+		await restoreNodeGraphState(nanoid);
+
 		return true;
 	} else {
 		return false;
@@ -615,7 +623,6 @@ function generateSettingsPanel() {
 function copyLinkToClipboard(link_value) {
 	navigator.clipboard.writeText(link_value).then(
 		function () {
-			console.log('Copied to the clipboard.');
 			showCopiedPopper();
 		},
 		function (err) {
@@ -1010,18 +1017,20 @@ export function startRenderLoop() {
 	});
 }
 
-function generateShareableLink(fileName) {
+function generateShareableLink(fileName, placeholder) {
 	let nanoIdPromise;
-	nanoIdPromise = fetch(`get_nano_id?filename=${encodeURIComponent(fileName)}`)
+	nanoIdPromise = fetch(
+		`get_nano_id?filename=${encodeURIComponent(fileName)}&is_placeholder=${placeholder}`,
+	)
 		.then((response) => {
 			if (!response.ok) {
 				throw new Error('Network response was not ok ' + response.statusText);
 			}
-			return response.json(); // Assuming the response is in JSON format
+			return response.json();
 		})
 		.then((data) => {
 			const nanoId = data.nano_id;
-			const currentUrl = window.location.origin; // Get the current URL's origin
+			const currentUrl = window.location.origin;
 			const shareableLink = `${currentUrl}/view?fileid=${nanoId}`;
 			globalSettings.guiParams.shareBindings.share = shareableLink;
 		})
@@ -1040,7 +1049,13 @@ export function loadModel(fileName, frameRange, root_url = DEFAULT_MODEL_ROUTE) 
 			console.log('GLB Loaded Successfully!');
 
 			// Retrieve the nano id shareable string.
-			generateShareableLink(fileName);
+			generateShareableLink(fileName, fileName === 'placeholder.glb');
+
+			// If we're loading from a non-standard location, ensure we update the state.
+			// This will ensure future visits to the display models page maintain the state.
+			if (root_url != DEFAULT_MODEL_ROUTE) {
+				updateLatestRender(fileName);
+			}
 
 			// Scene always contains default camera named "defaultCamera".
 			const hasCameras = sceneManager.scene.cameras.length > 1;
@@ -1103,6 +1118,20 @@ export function loadModel(fileName, frameRange, root_url = DEFAULT_MODEL_ROUTE) 
 	}
 
 	sceneManager.handleFreeze(true);
+}
+
+function updateLatestRender(fileName) {
+	fetch(`get_file_uuid_from_nano?nanoid=${encodeURIComponent(fileName)}`)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error('Network response was not ok ' + response.statusText);
+			}
+			return response.json();
+		})
+		.then((data) => {
+			nodeGraphManager.updateLatestRender(data.file_uuid);
+		})
+		.catch((error) => console.error('Error retrieving file uuid from nano:', error));
 }
 
 function clearModels() {

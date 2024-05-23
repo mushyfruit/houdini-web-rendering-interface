@@ -32,6 +32,7 @@ def generate_user_uuid():
 @bp.route("/get_nano_id", methods=["GET"])
 def generate_nano_id():
     filename = request.args.get('filename')
+    is_placeholder = request.args.get('is_placeholder') == 'true'
     if not filename:
         return jsonify({
             "error": "No filename was provided for nano id generation request."
@@ -42,22 +43,44 @@ def generate_nano_id():
     if stored_nano_id is None:
         nano_id = generate(size=10)
         redis_client.add_shareable_mapping(nano_id, filename)
+        if is_placeholder:
+            redis_client.add_placeholder_mapping(filename)
         stored_nano_id = nano_id
     return jsonify({"nano_id": stored_nano_id}), 200
 
 
 @bp.route("/get_glb_from_nano/<nano_id>", methods=["GET"])
-def retrieve_file_from_nano_id(nano_id):
+def retrieve_file_from_nano_id(nano_id, redirect_request=True):
     if nano_id.endswith(".glb") or nano_id.endswith(".gltf"):
         pattern = re.compile(r'\.glb$|\.gltf$', re.IGNORECASE)
         nano_id = re.sub(pattern, '', nano_id)
 
     filename = redis_client.get_filename_for_nanoid(nano_id)
     if filename is None:
+        if not redirect_request:
+            return None
         print(f"No filename found for nano_id: {nano_id}")
         return jsonify({"error": "Filename not found for the given nano_id."}), 404
 
-    return get_glb_file(filename)
+    if redirect_request:
+        return get_glb_file(filename)
+    else:
+        return filename
+
+
+@bp.route("/get_file_uuid_from_nano", methods=["GET"])
+def get_file_uuid_from_nano():
+    nano_id = request.args.get('nanoid')
+    if not nano_id:
+        return jsonify({"message": "No valid nano id was passed."}), 400
+
+    # Find the associated file uuid mapped to the nano id.
+    filename = retrieve_file_from_nano_id(nano_id, redirect_request=False)
+    if filename is None:
+        return jsonify({"message": "No valid file uuid was mapped "
+                                   "to nano id: {0}.".format(nano_id)}), 400
+
+    return jsonify({'file_uuid': filename})
 
 
 @bp.route('/view', methods=['GET'])
@@ -119,7 +142,11 @@ def graph_data():
 
     matching_files = glob.glob(search_pattern)
     if not matching_files:
-        return jsonify({"error": "No matching files with provided UUID."}), 400
+        if file_uuid == current_app.config["PLACEHOLDER_DIR"]:
+            # Make an exception if we're attempting to load placeholder.hip
+            matching_files = [current_app.config["PLACEHOLDER_HIP_PATH"]]
+        else:
+            return jsonify({"error": "No matching files with provided UUID."}), 400
 
     if len(matching_files) > 1:
         # Potentially indicates need for cleanup or strange collision issue.
@@ -207,6 +234,26 @@ def retrieve_stored_models():
         return jsonify({'model_data': stored_model_data})
     else:
         return jsonify({"message": "Invalid model data. Specify a key."}), 400
+
+
+@bp.route('/get_hip_name_from_nano_id', methods=['GET'])
+def hip_file_name_from_nanoid():
+    # Retrieve the nano id request argument.
+    nano_id = request.args.get('nanoid')
+    if not nano_id:
+        return jsonify({"message": "No valid nano id was passed."}), 400
+
+    # Find the associated file uuid mapped to the nano id.
+    filename = retrieve_file_from_nano_id(nano_id, redirect_request=False)
+    if filename is None:
+        return jsonify({"message": "No valid file uuid was mapped "
+                                   "to nano id: {0}.".format(nano_id)}), 400
+
+    hip_uuid = redis_client.retrieve_hip_uuid_from_filename(filename)
+    if hip_uuid:
+        return jsonify({'hip_uuid': hip_uuid})
+
+    return jsonify({"message": "Invalid filename. No linked hip file found."}), 400
 
 
 def allowed_hip(filename):

@@ -117,10 +117,23 @@ def retrieve_uuid_from_filename(redis_conn, user_uuid, file_hash):
     byte_file_hash = redis_conn.hget(f"user:{user_uuid}:hash_to_uuid", file_hash)
     return byte_file_hash.decode("utf-8")
 
+@with_redis_conn
+def retrieve_hip_uuid_from_filename(redis_conn, filename):
+    hip_uuid = redis_conn.get(f"filename_to_uuid:{filename}")
+    if hip_uuid is not None:
+        return hip_uuid.decode("utf-8")
+
+@with_redis_conn
+def add_placeholder_mapping(redis_conn, filename):
+    redis_conn.set(f"filename_to_uuid:{filename}", "placeholder")
+
 
 @with_redis_conn
 def store_render_data(redis_conn, render_type, hip_file_uuid, filename, node_path, frame_range):
     redis_conn.hset(f"file_render_data:{hip_file_uuid}:{render_type}", node_path, filename)
+
+    # Store mapping of filename back to the hip file that generated it.
+    redis_conn.set(f"filename_to_uuid:{filename}", hip_file_uuid)
 
     # Store latest render time for GLB file exports.
     if render_type == cnst.BackgroundRenderType.glb_file:

@@ -228,6 +228,23 @@ export function initNodeGraph(file_uuid, default_context = '/obj') {
 		});
 }
 
+export async function restoreNodeGraphState(nanoid) {
+	// Retrieve the file uuid.
+	try {
+		const response = await fetch(
+			`get_hip_name_from_nano_id?nanoid=${encodeURIComponent(nanoid)}`,
+		);
+		if (!response.ok) {
+			throw new Error('Hip retrieval failed: ' + response.statusText);
+		}
+		const data = await response.json();
+		nodeGraphManager.setFileUUID(data.hip_uuid);
+		console.log(`Setting: ${data.hip_uuid}`);
+	} catch (error) {
+		console.error('Unable to find an associated hip file for nano id:', error);
+	}
+}
+
 function displayNodeContext(cy, nodeName, nodeData) {
 	handleRenderAllButton(nodeData);
 	handleGlobalCookingBar(nodeName);
