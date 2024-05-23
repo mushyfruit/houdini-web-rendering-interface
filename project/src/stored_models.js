@@ -1,5 +1,6 @@
 import { onNodeGraphExit, hideRenderCanvas, handleDisplayModel } from './sidebar';
 import { nodeGraphManager } from './node_graph';
+import { DEFAULT_THUMBNAIL_ROUTE } from './constants';
 
 function initializeStoredModels(storedModels) {
 	const defaultWidth = '256px';
@@ -226,7 +227,7 @@ function adjustCardTitleToContainer(cardTitle) {
 }
 
 export function createThumbnail(thumb_name, nodePath, filePath, glbPath) {
-	const thumbUrl = `/get_thumbnail/${thumb_name}`;
+	const thumbUrl = DEFAULT_THUMBNAIL_ROUTE + thumb_name;
 
 	const img = document.createElement('img');
 	img.src = thumbUrl;

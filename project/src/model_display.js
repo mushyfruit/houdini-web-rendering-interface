@@ -2,7 +2,12 @@ import * as BABYLON from '@babylonjs/core';
 import { GridMaterial } from '@babylonjs/materials';
 import { Pane } from 'tweakpane';
 import { createPopper } from '@popperjs/core';
-import { DISPLAY_UI_PARAMS, DEFAULT_SKYBOXES, DEFAULT_CAMERA_OPTION } from './constants';
+import {
+	DISPLAY_UI_PARAMS,
+	DEFAULT_SKYBOXES,
+	DEFAULT_CAMERA_OPTION,
+	DEFAULT_MODEL_ROUTE,
+} from './constants';
 
 // Must specify the loader as suffix here.
 import '@babylonjs/loaders/glTF';
@@ -352,7 +357,7 @@ function onInit() {
 
 	// If there's no specific file to load, then just load the placeholder.
 	if (!loadedFromLink) {
-		loadModel('placeholder.glb', [1, 240]);
+		loadModel('placeholder.glb', [1, 240], '/static/placeholder/');
 	}
 }
 
@@ -1026,7 +1031,7 @@ function generateShareableLink(fileName) {
 }
 
 // Handle loading and clearing models.
-export function loadModel(fileName, frameRange, root_url = '/get_glb/') {
+export function loadModel(fileName, frameRange, root_url = DEFAULT_MODEL_ROUTE) {
 	sceneManager.handleUnfreeze(true);
 
 	clearModels();

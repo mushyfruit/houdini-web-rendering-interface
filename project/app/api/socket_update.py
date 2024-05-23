@@ -1,7 +1,7 @@
 import os
 import json
 import uuid
-from flask import request, current_app, session
+from flask import request, current_app
 
 from app import socketio, redis_client, constants as cnst
 from app.api import hou_api, utils
@@ -182,17 +182,29 @@ def validate_required_keys(data, keys):
 
 
 def generate_uuid_filepath(glb_suffix):
+    """Core function for determining the output paths for the glb file and associated
+    png thumbnail.
+
+    The default config value for the static folder is overriden to /var/model_storage,
+    so that nginx can more efficiently serve the user generated data.
+
+    :param glb_suffix: Suffix of the glb file
+    :type glb_suffix: str
+    :returns: Tuple containing the render UUID, the glb render path, and the thumbnail path.
+    :rtype: tuple(str, str, str)
+    """
     if glb_suffix not in ["glb", "gltf"]:
         logger.error("Invalid suffix provided: {0}".format(glb_suffix))
         return None, None, None
 
-    output_dir = os.path.join(current_app.static_folder, 'temp')
+    glb_dir = os.path.join(current_app.static_folder, current_app.config["MODEL_DIR"])
+    png_dir = os.path.join(current_app.static_folder, current_app.config["THUMBNAIL_DIR"])
 
     render_id = uuid.uuid4()
     render_name = "{0}.{1}".format(render_id, glb_suffix)
     thumbnail_name = "{0}.{1}".format(render_id, cnst.THUMBNAIL_EXT)
 
-    render_path = os.path.join(output_dir, render_name)
-    thumbnail_path = os.path.join(output_dir, thumbnail_name)
+    glb_render_path = os.path.join(glb_dir, render_name)
+    thumbnail_path = os.path.join(png_dir, thumbnail_name)
 
-    return render_id, render_path, thumbnail_path
+    return render_id, glb_render_path, thumbnail_path

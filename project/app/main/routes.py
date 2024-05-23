@@ -9,7 +9,7 @@ from app.main import bp
 from app.api import hou_api
 from app.constants import CURRENT_FILE_UUID
 from flask import (current_app, render_template,
-                   send_file, jsonify, request, session, send_from_directory)
+                   url_for, redirect, jsonify, request, session, send_from_directory)
 from werkzeug.utils import secure_filename
 
 
@@ -81,43 +81,17 @@ def set_existing_user_uuid():
         return jsonify({'status': 'error', 'message': 'No UUID provided'}), 400
 
 
-@bp.route("/get_thumbnail/<filename>", methods=['GET'])
-def get_thumbnail(filename):
-    if not filename.endswith(".png"):
-        filename += ".glb"
-
-    static_directory = os.path.join(current_app.static_folder, 'temp')
-    return send_from_directory(static_directory, filename)
-
-
 @bp.route("/get_glb/<filename>", methods=['GET'])
 def get_glb_file(filename):
     if not filename.endswith(".glb"):
-        render_id = filename
-        filename = render_id + ".glb"
+        return jsonify({"error": "Invalid file type requested."}), 400
 
-    # Separate logic for placeholder model.
-    if filename == current_app.config['PLACEHOLDER_FILE']:
-        placeholder_dir = os.path.join(current_app.static_folder,
-                                       current_app.config['PLACEHOLDER_DIR'])
-        glb_file_path = os.path.join(placeholder_dir, filename)
-    else:
-        glb_file_path = os.path.join(current_app.static_folder, 'temp',
-                                     filename)
+    # If not using nginx, call `send_file` with flask to send the .glb
 
-    # Send the GLTF file as a response
-    if not os.path.exists(glb_file_path):
-        print("{0} does not exist on disk.".format(glb_file_path))
-        return jsonify({"error": "Requested an invalid .glb file."}), 400
-
-    # Send with mimetype as gltf+json (even though file is .glb).
-    return send_file(glb_file_path,
-                     mimetype='application/gltf+json',
-                     as_attachment=True,
-                     download_name='model.gltf',
-                     etag=False,
-                     max_age=0,
-                     conditional=False)
+    # Redirect the requst to nginx.
+    model_folder = current_app.config["MODEL_DIR"]
+    glb_url = url_for('static', filename='{0}/{1}'.format(model_folder, filename))
+    return redirect(glb_url, code=302)
 
 
 @bp.route("/node_data", methods=['GET'])
@@ -238,3 +212,15 @@ def retrieve_stored_models():
 def allowed_hip(filename):
     _, ext = os.path.splitext(filename)
     return ext.lower() in current_app.config["ALLOWED_EXTENSIONS"]
+
+
+#############################################################################
+# Unused routes for static files that nginx directly serves.
+
+@bp.route("/_get_thumbnail/<filename>", methods=['GET'])
+def get_thumbnail(filename):
+    if not filename.endswith(".glb"):
+        return jsonify({"error": "Invalid file type requested."}), 400
+
+    static_directory = os.path.join(current_app.static_folder, 'user_thumbnails')
+    return send_from_directory(static_directory, filename)

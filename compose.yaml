@@ -22,6 +22,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - ./nginx:/var/model_storage
       - ./project:/root/hou_webserver
       - shared_hip_storage:/root/hip_storage
       - flask_socket:/run/flask-socket
@@ -41,6 +42,7 @@ services:
         context: .
         dockerfile: docker/Dockerfile.celery
     volumes:
+      - ./nginx:/var/model_storage
       - ./project:/root/hou_webserver
       - shared_hip_storage:/root/hip_storage
     env_file:

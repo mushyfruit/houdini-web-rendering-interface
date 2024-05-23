@@ -1,5 +1,6 @@
 import { cytoscape, io } from './main';
 import { createThumbnail } from './stored_models.js';
+import { DEFAULT_THUMBNAIL_ROUTE } from './constants';
 
 let globalFileUuid = null;
 let poppers = {};
@@ -610,7 +611,7 @@ function handleThumbUpdate(data) {
 }
 
 function handleThumbFinish(data) {
-	const thumbUrl = `/get_thumbnail/${data.fileName}`;
+	const thumbUrl = DEFAULT_THUMBNAIL_ROUTE + data.fileName;
 	nodeGraphManager.updateNodeStateCache(data.nodePath, 'thumbnail', thumbUrl);
 
 	const thumbnail = document.querySelector(`#node-thumbnail[data-node-path="${data.nodePath}"]`);

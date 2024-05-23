@@ -6,6 +6,9 @@ export const DEFAULT_SKYBOXES = {
 	'Aircraft Workshop': 'aircraft_workshop.env',
 };
 
+export const DEFAULT_MODEL_ROUTE = '/static/user_models/';
+export const DEFAULT_THUMBNAIL_ROUTE = '/static/user_thumbnails/';
+
 export const DEFAULT_CAMERA_OPTION = {
 	text: 'No cam',
 	value: 'defaultCamera',

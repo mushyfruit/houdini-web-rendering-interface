@@ -32,9 +32,12 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
     app.config.from_prefixed_env()
 
+    # Override the app's static folder value.
+    app.static_folder = app.config.get('STATIC_FOLDER')
+
     sess.init_app(app)
 
-    socketio.init_app(app)
+    socketio.init_app(app, async_mode='eventlet')
 
     celery_init_app(app)
 
@@ -45,6 +48,7 @@ def create_app(config_class=Config):
     app.register_blueprint(hou_api_bp, url_prefix='/api')
 
     ensure_upload_folder(app)
+
     return app
 
 
