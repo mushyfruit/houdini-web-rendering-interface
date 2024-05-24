@@ -59,6 +59,7 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
   nginx:
     build:
       context: .

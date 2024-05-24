@@ -65,13 +65,27 @@ def has_generated_nanoid(redis_conn, file_uuid):
     if stored_nanoid is not None:
         return stored_nanoid.decode('utf-8')
 
+@with_redis_conn
+def get_hip_original_name_from_filename(redis_conn, filename):
+    hip_uuid = redis_conn.get(f"filename_to_uuid:{filename}")
+    if hip_uuid is None:
+        return
+
+    original_filename = redis_conn.hget(f"file_meta:{hip_uuid.decode('utf-8')}", "original_filename")
+    if original_filename is not None:
+        return original_filename.decode('utf-8')
+
+@with_redis_conn
+def get_hip_name_from_uuid(redis_conn, hip_filename):
+    original_filename = redis_conn.hget(f"file_meta:{hip_filename}", "original_filename")
+    if original_filename is not None:
+        return original_filename.decode('utf-8')
 
 @with_redis_conn
 def get_filename_for_nanoid(redis_conn, nano_id):
     stored_filename = redis_conn.hget("global:nanoid_to_uuid", nano_id)
     if stored_filename is not None:
         return stored_filename.decode('utf-8')
-
 
 @with_redis_conn
 def add_shareable_mapping(redis_conn, file_nanoid, file_uuid):
@@ -126,6 +140,7 @@ def retrieve_hip_uuid_from_filename(redis_conn, filename):
 @with_redis_conn
 def add_placeholder_mapping(redis_conn, filename):
     redis_conn.set(f"filename_to_uuid:{filename}", "placeholder")
+    redis_conn.hset(f"file_meta:placeholder", "original_filename", "placeholder.hiplc")
 
 
 @with_redis_conn

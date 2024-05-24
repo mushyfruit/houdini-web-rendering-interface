@@ -623,13 +623,13 @@ function generateSettingsPanel() {
 function copyLinkToClipboard(link_value) {
 	if (navigator.clipboard) {
 		navigator.clipboard.writeText(link_value).then(
-		function () {
-			showCopiedPopper();
-		},
-		function (err) {
-			console.error('Could not copy text: ', err);
-		},
-	);
+			function () {
+				showCopiedPopper();
+			},
+			function (err) {
+				console.error('Could not copy text: ', err);
+			},
+		);
 	} else {
 		fallbackCopy(link_value);
 	}
@@ -643,8 +643,7 @@ function fallbackCopy(textToCopy) {
 	try {
 		document.execCommand('copy');
 		showCopiedPopper();
-	} catch (err) {
-	}
+	} catch (err) {}
 	document.body.removeChild(textarea);
 }
 

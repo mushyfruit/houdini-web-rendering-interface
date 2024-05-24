@@ -1,13 +1,15 @@
 import os
-from flask import Flask, request
+from flask import Flask
 from flask_socketio import SocketIO
 from flask_session import Session
+from flask_wtf.csrf import CSRFProtect
 
 from celery import Celery, Task
 from config import Config
 
 socketio = SocketIO()
 sess = Session()
+csrf = CSRFProtect()
 
 
 def celery_init_app(app):
@@ -38,6 +40,8 @@ def create_app(config_class=Config):
 
     # Override the app's static folder value.
     app.static_folder = app.config.get('STATIC_FOLDER')
+
+    csrf.init_app(app)
 
     sess.init_app(app)
 

@@ -100,7 +100,7 @@ export async function handleStoredModels() {
 
 function handleEmptyModelData() {
 	// TODO Indicate no valid renders were found.
-	console.log("No valid renders found for user.")
+	console.log('No valid renders found for user.');
 }
 
 function populateFiles(files) {

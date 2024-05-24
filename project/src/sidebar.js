@@ -28,10 +28,15 @@ function getUserID() {
 			.catch((error) => console.error('Error generating UUID:', error));
 	} else {
 		console.log('Found existing UUID for the user:', userUuid);
+
+		// Retrieve the csrfToken as we're making a state-changing request.
+		const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
 		fetch('set_existing_user_uuid', {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
+				'X-CSRFToken': csrfToken,
 			},
 			body: JSON.stringify({ userUuid: userUuid }),
 		})
@@ -197,6 +202,10 @@ function setupSidebar() {
 	const sidebar = document.querySelector('.sidebar');
 	const menuItems = document.querySelectorAll('.menu > ul > li');
 	menuItems.forEach((menuItem) => {
+		// Avoid setting up event listener for download buttons.
+		if (menuItem.classList.contains('no-active')) {
+			return;
+		}
 		menuItem.addEventListener('click', function (e) {
 			removeClassFromElements(getSiblings(this), 'active');
 			toggleClass(this, 'active');
@@ -275,6 +284,20 @@ function setupSidebar() {
 		}
 	});
 
+	const modelDownloader = document.querySelector('.download-model');
+	if (modelDownloader) {
+		modelDownloader.addEventListener('click', async (e) => {
+			await downloadActiveItem('glb');
+		});
+	}
+
+	const hipDownloader = document.querySelector('.download-hip');
+	if (hipDownloader) {
+		hipDownloader.addEventListener('click', async (e) => {
+			await downloadActiveItem('hip');
+		});
+	}
+
 	const helpButton = document.querySelector('.help-btn');
 	if (helpButton) {
 		helpButton.addEventListener('click', (e) => {
@@ -303,6 +326,67 @@ function slideToggle(element) {
 			},
 			{ once: true },
 		);
+	}
+}
+
+async function downloadActiveItem(ext) {
+	let requestItem;
+	if (ext === 'hip') requestItem = nodeGraphManager.getLatestUUID();
+	else if (ext === 'glb') {
+		requestItem = nodeGraphManager.getLatestRender();
+	} else {
+		console.error('Invalid download extension type!');
+		return;
+	}
+
+	if (requestItem)
+		try {
+			const response = await fetch(
+				`/generate_download?filename=${encodeURIComponent(requestItem)}&ext=${encodeURIComponent(ext)}`,
+			);
+			if (!response.ok) {
+				throw new Error(response.message);
+			}
+
+			const jsonData = await response.json();
+			if (jsonData.download_link) {
+				await fetchModel(jsonData.download_link);
+			}
+		} catch (error) {
+			console.error('Unable to download the active model:', error);
+		}
+}
+
+async function fetchModel(downloadLink) {
+	try {
+		const response = await fetch(downloadLink);
+		if (!response.ok) {
+			throw new Error(response.message);
+		}
+
+		const blob = await response.blob();
+		const url = window.URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.style.display = 'none';
+		a.href = url;
+
+		// Use the filename from the response headers if available, otherwise set a default
+		const contentDisposition = response.headers.get('Content-Disposition');
+		let filename = 'download.glb';
+		if (contentDisposition) {
+			const match = contentDisposition.match(/filename="?([^"]+)"?/);
+			if (match.length > 1) {
+				filename = match[1];
+			}
+		}
+
+		a.download = filename;
+		document.body.appendChild(a);
+		a.click();
+		window.URL.revokeObjectURL(url);
+		document.body.removeChild(a);
+	} catch (error) {
+		console.error('Unable to download the active model:', error);
 	}
 }
 

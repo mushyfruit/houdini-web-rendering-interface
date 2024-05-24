@@ -2,6 +2,7 @@ import re
 import os
 import glob
 import uuid
+import time
 from nanoid import generate
 
 from app import redis_client
@@ -11,6 +12,8 @@ from app.constants import CURRENT_FILE_UUID
 from flask import (current_app, render_template,
                    url_for, redirect, jsonify, request, session, send_from_directory)
 from werkzeug.utils import secure_filename
+
+temporary_links = {}
 
 
 @bp.route('/', methods=['GET', 'POST'])
@@ -27,6 +30,71 @@ def generate_user_uuid():
     user_uuid = str(uuid.uuid4())
     session["user_uuid"] = user_uuid
     return jsonify(user_uuid=user_uuid)
+
+
+@bp.route('/generate_download', methods=["GET"])
+def generate_download_link():
+    filename = request.args.get('filename')
+    file_ext = request.args.get('ext')
+    if not filename:
+        return jsonify({
+            "error": "No filename was provided for download generation request."
+        }), 400
+
+    download_id = str(uuid.uuid4())
+    expiry_time = time.time() + 3600
+    temporary_links[download_id] = (filename, expiry_time)
+    return jsonify(download_link=f"/download/{file_ext}/{download_id}")
+
+
+@bp.route('/download/<ext>/<download_id>', methods=['GET'])
+def download_glb_file(ext, download_id):
+    if ext not in ('glb', 'hip'):
+        return jsonify({
+            "error": "Invalid download extension provided."
+        }), 400
+
+    if download_id not in temporary_links:
+        return jsonify({
+            "error": "Invalid download link provided."
+        }), 400
+
+    filename, expiry_time = temporary_links[download_id]
+    if time.time() >= expiry_time:
+        return jsonify({
+            "error": "Download link expired!"
+        }), 400
+
+    if ext == "glb":
+        mimetype = 'model/gltf-binary'
+        directory_path = f"{current_app.config['STATIC_FOLDER']}/{current_app.config['MODEL_DIR']}"
+    else:
+        mimetype = 'application/octet-stream'
+        directory_path = current_app.config['UPLOAD_FOLDER']
+        if 'hip' not in filename:
+            # Hip UUID's are stored without file extension (.hip, .hiplc, .hipnc)
+            # Retrieve the file extension based on the redis entry.
+            original_name = redis_client.get_hip_name_from_uuid(filename)
+            if original_name:
+                filename += os.path.splitext(original_name)[1]
+
+    if os.path.exists(os.path.join(directory_path, filename)):
+        return send_from_directory(directory_path,
+                                   filename,
+                                   download_name=generate_download_name(filename, ext) or filename,
+                                   as_attachment=True,
+                                   mimetype=mimetype)
+
+    placeholder_path = f"{current_app.config['STATIC_FOLDER']}/{current_app.config['PLACEHOLDER_DIR']}"
+    if os.path.exists(os.path.join(placeholder_path, filename)):
+        return send_from_directory(placeholder_path,
+                                   filename,
+                                   as_attachment=True,
+                                   mimetype=mimetype)
+
+    return jsonify({
+        "error": "File does not exist!"
+    }), 404
 
 
 @bp.route("/get_nano_id", methods=["GET"])
@@ -100,7 +168,6 @@ def set_existing_user_uuid():
     user_uuid = data.get('userUuid')
 
     if user_uuid:
-        print("Setting existing session user ID to {}".format(user_uuid))
         session["user_uuid"] = user_uuid
         return jsonify({'status': 'success', 'message': 'UUID set in session'}), 200
     else:
@@ -262,6 +329,19 @@ def hip_file_name_from_nanoid():
 def allowed_hip(filename):
     _, ext = os.path.splitext(filename)
     return ext.lower() in current_app.config["ALLOWED_EXTENSIONS"]
+
+
+def generate_download_name(filename, ext):
+    if ext == 'glb':
+        hip_name = redis_client.get_hip_original_name_from_filename(filename)
+    else:
+        filename_base = os.path.splitext(filename)[0]
+        hip_name = redis_client.get_hip_name_from_uuid(filename_base)
+
+    if hip_name is not None:
+        # Remove the file extension.
+        hip_name, _ = os.path.splitext(hip_name)
+        return f"{hip_name}.{ext}"
 
 
 #############################################################################
