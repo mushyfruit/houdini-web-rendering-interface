@@ -18,8 +18,12 @@ def celery_init_app(app):
             with app.app_context():
                 return self.run(*args, **kwargs)
 
-    celery_app = Celery(app.name, task_cls=FlaskTask)
+    # Can't intialize with TaskCls argument else it raises:
+    # AttributeError: Can't pickle local object 'celery_init_app.<locals>.FlaskTask'
+    # Instead setting it after initializing class seems to work fine?
+    celery_app = Celery(app.name)
     celery_app.config_from_object(app.config["CELERY"])
+    celery_app.Task = FlaskTask
     celery_app.set_default()
     app.extensions["celery"] = celery_app
     return celery_app

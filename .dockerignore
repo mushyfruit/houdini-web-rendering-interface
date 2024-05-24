@@ -6,3 +6,5 @@
 **/util
 project/app/static/**
 node_modules
+docker
+nginx

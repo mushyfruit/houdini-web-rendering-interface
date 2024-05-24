@@ -9,4 +9,7 @@ COPY . .
 
 RUN pip install --no-cache-dir -r requirements_app.txt
 
+# In `project.app.__init__.py` ensure we spawn the worker processes, rather than preforking!
+# Preforking behavior will raise the following: OpenCL Exception: clGetPlatformInfo (-33).
+# OpenCL might have these issues because child process inherits the GPU context of parent?
 CMD ["/bin/bash", "-c", "source /root/setup_hserver.sh && celery --app make_celery worker --loglevel=info --logfile=logs/celery.log -E -c 2"]

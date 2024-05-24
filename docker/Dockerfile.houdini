@@ -49,5 +49,20 @@ ENV SIDEFX_CLIENT=$SIDEFX_CLIENT SIDEFX_SECRET=$SIDEFX_SECRET HFS_TARGET=$HFS_VE
     PATH="${PATH}:/opt/houdini/build/houdini/sbin:/opt/houdini/build/bin" \
     PYTHONPATH="${PYTHONPATH}:/opt/houdini/build/houdini/python3.9libs:/usr/local/lib/python3.9/site-packages:/usr/local/lib64/python3.9/site-packages"
 
-ENV LD_PRELOAD="/opt/houdini/build/dsolib/libjemalloc.so" 
+ENV LD_PRELOAD="/opt/houdini/build/dsolib/libjemalloc.so"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ocl-icd-libopencl1 \
+        opencl-headers \
+        clinfo && \
+    rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /etc/OpenCL/vendors && \
+    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
+
+# Stop Houdini from conflicting with our drivers!
+ENV HOUDINI_USE_HFS_OCL 0
+ENV HOUDINI_OCL_DEVICETYPE GPU
+
 WORKDIR /root/hou_webserver

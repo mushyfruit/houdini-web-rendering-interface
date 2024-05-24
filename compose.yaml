@@ -50,7 +50,15 @@ services:
     depends_on:
       - houdini_base
       - redis
-
+    # Give the celery works access to the nvidia gpu's!
+    # Remove this for a CPU-bound workflow.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
   nginx:
     build:
       context: .
