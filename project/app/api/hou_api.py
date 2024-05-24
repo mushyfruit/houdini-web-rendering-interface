@@ -34,6 +34,8 @@ _redis_thread = None
 
 def scan_and_display_nodes(parent_node, load=True, hip_file=None):
     if load:
+        # Avoid cooking the file, only need to retrieve node graph.
+        hou.setUpdateMode(hou.updateMode.Manual)
         hou.hipFile.load(hip_file,
                          suppress_save_prompt=True,
                          ignore_load_warnings=True)
