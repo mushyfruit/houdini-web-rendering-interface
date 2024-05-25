@@ -121,6 +121,18 @@ def locate_and_store_icon(contents,
         if mapped_name:
             node_type_folder, new_name = mapped_name.split("_", 1)
             icon_path = os.path.join(node_type_folder, new_name + '.svg')
+        else:
+            # Some icons are missing from the SideFX provided icon mapping :(
+            # (e.g. measure 2.0 node indicates SOP_measure-2.0, but that doesn't exist.
+            # Attempt to strip node version number and check directly for base version.
+            if "-" in icon_path:
+                base_icon_name = icon_path.split("-")[0]
+                potential_paths = [name for name in contents if name.startswith(base_icon_name)]
+                if base_icon_name in potential_paths:
+                    icon_path = base_icon_name + ".svg"
+                elif potential_paths:
+                    icon_path = potential_paths[0]
+
 
     if icon_path in contents:
         with zip_file.open(icon_path) as icon:
