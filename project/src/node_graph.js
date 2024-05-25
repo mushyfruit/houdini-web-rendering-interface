@@ -328,14 +328,14 @@ function setupDblClick(cy) {
 }
 
 function setupPoppers(cy) {
-	cy.on('click', 'node', (event) => {
+	const handleEvent = (event) => {
 		const node = event.target;
 
 		if (appState.activeNode && appState.activeNode !== node) {
 			removePopper(appState.activeNode);
 		}
 
-		if (appState.activeNode && appState.activeNode == node) {
+		if (appState.activeNode && appState.activeNode === node) {
 			const popperId = `${node.id()}_popper`;
 			const popperDiv = document.getElementById(popperId);
 			if (popperDiv.hasAttribute('data-show')) {
@@ -349,7 +349,10 @@ function setupPoppers(cy) {
 			appState.activeNode = node;
 			createPopperForNode(cy, node);
 		}
-	});
+	};
+
+	cy.on('click', 'node', handleEvent);
+	cy.on('touchend', 'node', handleEvent);
 }
 
 export function deletePoppers() {

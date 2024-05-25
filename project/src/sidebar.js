@@ -44,7 +44,47 @@ document.addEventListener('DOMContentLoaded', (event) => {
 	toggleSidebar();
 	setupSidebar();
 	connectHIP();
+
+	window.addEventListener('resize', resizeIcons);
 });
+
+function resizeIcons() {
+	const sidebar = document.querySelector('.sidebar');
+	const icons = document.querySelectorAll('.sidebar .menu ul li .icon');
+	const links = document.querySelectorAll('.sidebar .menu ul li a');
+
+	const maxIconSize = 20;
+	const minIconSize = 6;
+	const maxPadding = 12;
+	const minPadding = 2;
+
+	const sidebarHeight = sidebar.clientHeight;
+	const contentHeight = sidebar.scrollHeight;
+
+	if (contentHeight > sidebarHeight) {
+		// Calculate overflow ratio
+		const overflowRatio = sidebarHeight / contentHeight;
+		const newSize = Math.max(minIconSize, maxIconSize * overflowRatio);
+		const newSizePadding = Math.max(minPadding, maxPadding * overflowRatio);
+		icons.forEach((icon) => {
+			icon.style.fontSize = `${newSize}px`;
+		});
+		links.forEach((icon) => {
+			icon.style.paddingBottom = `${newSizePadding}px`;
+			icon.style.paddingTop = `${newSizePadding}px`;
+		});
+	} else {
+		// Reset to max size if no overflow
+		icons.forEach((icon) => {
+			icon.style.fontSize = `${maxIconSize}px`;
+			icon.style.fontSize = `${maxIconSize}px`;
+		});
+		links.forEach((icon) => {
+			icon.style.paddingBottom = `${maxPadding}px`;
+			icon.style.paddingTop = `${maxPadding}px`;
+		});
+	}
+}
 
 function getUserID() {
 	let userUuid = localStorage.getItem('userUuid');
@@ -159,32 +199,41 @@ function connectFileInput() {
 
 function toggleSidebar() {
 	const menuBtn = document.querySelector('.menu-btn');
+	const logoImage = document.querySelector('.main-logo-img');
 	const sidebar = document.querySelector('.sidebar');
 	const uploadContainer = document.querySelector('.wrapped-container');
 
 	menuBtn.addEventListener('click', () => {
-		sidebar.classList.toggle('active');
-		if (sidebar.classList.contains('file-upload')) {
-			sidebar.classList.remove('file-upload');
-			slideToggle(uploadContainer);
-		}
-
-		if (!sidebar.classList.contains('file-upload') && sidebar.classList.contains('active')) {
-			sidebar.style.transitionDuration = '0.5s';
-		}
-
-		const storedModels = document.querySelector('.stored-models');
-		if (storedModels) {
-			handleStoredModelsToggle(storedModels, sidebar, false);
-		}
-
-		const transitionEnded = function () {
-			sidebar.removeEventListener('transitionend', transitionEnded);
-			sidebar.style.transitionDuration = '';
-		};
-
-		sidebar.addEventListener('transitionend', transitionEnded);
+		_handleSidebarToggle(sidebar, uploadContainer);
 	});
+
+	logoImage.addEventListener('click', () => {
+		_handleSidebarToggle(sidebar, uploadContainer);
+	});
+}
+
+function _handleSidebarToggle(sidebar, uploadContainer) {
+	sidebar.classList.toggle('active');
+	if (sidebar.classList.contains('file-upload')) {
+		sidebar.classList.remove('file-upload');
+		slideToggle(uploadContainer);
+	}
+
+	if (!sidebar.classList.contains('file-upload') && sidebar.classList.contains('active')) {
+		sidebar.style.transitionDuration = '0.5s';
+	}
+
+	const storedModels = document.querySelector('.stored-models');
+	if (storedModels) {
+		handleStoredModelsToggle(storedModels, sidebar, false);
+	}
+
+	const transitionEnded = function () {
+		sidebar.removeEventListener('transitionend', transitionEnded);
+		sidebar.style.transitionDuration = '';
+	};
+
+	sidebar.addEventListener('transitionend', transitionEnded);
 }
 
 async function handleNodeGraph() {
@@ -483,6 +532,11 @@ function displayGlobalSettings() {
 	}
 }
 function displayHelpInformation() {
+	let modalWidth = '60%';
+	if (window.matchMedia('(max-width: 600px)').matches) {
+		modalWidth = '90%';
+	}
+
 	Swal.fire({
 		title: 'Using the Houdini Web Previewer',
 		html: `
@@ -511,7 +565,7 @@ function displayHelpInformation() {
         `,
 		icon: 'question',
 		animation: false,
-		width: '70%',
+		width: modalWidth,
 	});
 }
 
