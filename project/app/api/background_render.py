@@ -123,6 +123,14 @@ def prepare_gltf_rop(out_node, category, is_manager, render_data, render_path, g
         f_parm.deleteAllKeyframes()
         f_parm.set(frames[i])
 
+    export_settings = render_data["export_settings"]
+    for parmName, value in export_settings.items():
+        try:
+            out_node.parm(parmName.lower()).set(value)
+        except Exception as e:
+            logging.error("Failed to set export setting: "
+                          "{0}\n{1}".format(parmName.lower(), e))
+
 
 def update_progress(rop_node, render_event_type, time):
     # Update the correct loading bar with "data-node-name" attribute via `nodeName`.

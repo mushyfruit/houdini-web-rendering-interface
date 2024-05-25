@@ -19,7 +19,7 @@ class PublishChannels(object):
 class RenderTaskStruct(
         namedtuple(
             "RenderTaskStruct",
-            "node_path glb_path thumbnail_path start end step file_uuid socket_id")):
+            "node_path glb_path thumbnail_path start end step file_uuid socket_id export_settings")):
     """Immutable data struct defining necessary fields to perform the
     render task.
 

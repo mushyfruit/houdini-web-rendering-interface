@@ -1,6 +1,7 @@
 import { cytoscape, io } from './main';
 import { createThumbnail } from './stored_models.js';
 import { DEFAULT_THUMBNAIL_ROUTE } from './constants';
+import { exportSettings } from './sidebar.js';
 
 let globalFileUuid = null;
 let poppers = {};
@@ -692,6 +693,7 @@ function submitRenderTask(start, end, nodePath) {
 			step: 1,
 			path: nodePath,
 			file: nodeGraphManager.getLatestUUID(),
+			exportSettings: exportSettings.exportParams,
 		},
 		(err, response) => {
 			if (err) {

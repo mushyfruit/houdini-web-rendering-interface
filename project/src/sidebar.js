@@ -4,6 +4,40 @@ import { handleStoredModels, handleStoredModelsToggle } from './stored_models';
 
 import Swal from 'sweetalert2';
 
+class globalExportSettings {
+	constructor() {
+		this.exportParams = {
+			exportMaterials: true,
+			exportCameras: true,
+			exportLights: true,
+			customAttribs: true,
+		};
+		this.loadParams();
+	}
+
+	updateSetting(key, value) {
+		if ((!key) in this.exportParams) {
+			return;
+		}
+
+		this.exportParams[key] = value;
+	}
+
+	saveParams() {
+		localStorage.setItem('exportSettings', JSON.stringify(this.exportParams));
+	}
+
+	loadParams() {
+		const savedSettings = JSON.parse(localStorage.getItem('exportSettings'));
+		if (savedSettings) {
+			this.exportParams = savedSettings;
+		}
+	}
+}
+
+const exportSettings = new globalExportSettings();
+export { exportSettings };
+
 document.addEventListener('DOMContentLoaded', (event) => {
 	getUserID();
 	connectFileInput();
@@ -284,6 +318,13 @@ function setupSidebar() {
 		}
 	});
 
+	const globalSettings = document.querySelector('.global-settings');
+	if (globalSettings) {
+		globalSettings.addEventListener('click', (e) => {
+			displayGlobalSettings();
+		});
+	}
+
 	const modelDownloader = document.querySelector('.download-model');
 	if (modelDownloader) {
 		modelDownloader.addEventListener('click', async (e) => {
@@ -390,6 +431,57 @@ async function fetchModel(downloadLink) {
 	}
 }
 
+function displayGlobalSettings() {
+	const customAttribs = exportSettings.exportParams.customAttribs;
+	const exportMaterials = exportSettings.exportParams.exportMaterials;
+	const exportCameras = exportSettings.exportParams.exportCameras;
+	const exportLights = exportSettings.exportParams.exportLights;
+
+	Swal.fire({
+		title: 'Global Settings',
+		html: `
+			<div class="help-align-left">
+				<h5>Export Settings</h5>
+				<hr>
+				<div>
+					<label>
+						<input id="customAttribs" type="checkbox" ${customAttribs ? 'checked' : ''}> Export Custom Attributes
+					</label>
+				</div>
+				<div>
+					<label>
+						<input id="exportMaterials" type="checkbox" ${exportMaterials ? 'checked' : ''}> Export Materials
+					</label>
+					<br>
+					<label>
+						<input id="exportCameras" type="checkbox" ${exportCameras ? 'checked' : ''}> Export Cameras
+					</label>
+					<br>
+					<label>
+						<input id="exportLights" type="checkbox" ${exportLights ? 'checked' : ''}> Export Lights
+					</label>
+				</div>
+			</div>
+    	`,
+		animation: false,
+		width: 'fit-content',
+	});
+
+	const headerElement = document.getElementById('swal2-title');
+	if (headerElement) {
+		headerElement.style.fontSize = '1.35em';
+	}
+
+	const swalContainer = document.querySelector('.swal2-html-container');
+	if (swalContainer) {
+		const checkboxes = swalContainer.querySelectorAll('input[type="checkbox"]');
+		checkboxes.forEach((checkbox) => {
+			checkbox.addEventListener('change', function () {
+				exportSettings.updateSetting(this.id, this.checked);
+			});
+		});
+	}
+}
 function displayHelpInformation() {
 	Swal.fire({
 		title: 'Using the Houdini Web Previewer',

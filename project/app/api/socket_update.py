@@ -16,6 +16,7 @@ def receive_render_task(render_data):
     end = render_data.get('end')
     step = render_data.get('step')
     node_path = render_data.get('path')
+    export_settings = render_data.get('exportSettings')
 
     # Can't rely on session object for file_uuid as if HTTP route
     # make change to session, it doesn't seem to update WebSocket connection.
@@ -37,7 +38,8 @@ def receive_render_task(render_data):
                                               end=end,
                                               step=step,
                                               file_uuid=file_uuid,
-                                              socket_id=socket_id)
+                                              socket_id=socket_id,
+                                              export_settings=export_settings)
         logger.info(render_struct)
         result = hou_api.submit_node_for_render(render_struct)
         if not result:
