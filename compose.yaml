@@ -8,6 +8,8 @@ services:
         SIDEFX_CLIENT: "${SIDEFX_CLIENT}"
         SIDEFX_SECRET: "${SIDEFX_SECRET}"
         HFS_VER: "${HFS_VER}"
+        # Defines where to install Houdini, can be overriden here.
+        HOU_INSTALL_LOCATION: "hou_download"
     image: houdini-base
     container_name: houdini_base
     env_file:

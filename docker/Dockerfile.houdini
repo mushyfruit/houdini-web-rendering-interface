@@ -1,18 +1,24 @@
 # FIRST STAGE: Download Houdini
 FROM python:3.9-slim AS houdini-downloader
+ARG HOU_INSTALL_LOCATION
+ARG SIDEFX_SECRET
+ARG SIDEFX_CLIENT
+ARG HFS_VER
 
 WORKDIR /code
-ARG DOWNLOAD_HOUDINI
 COPY . ./houdini_install
+
+# DOCKER_DL used within the `hou_install.py` script.
 ENV PYTHONPATH=/code DOCKER_DL=true
+
+# If user has downloaded Houdini alread then copy it over, otherwise download directly into container.
 RUN mkdir /houdini && \
-    if [ "$DOWNLOAD_HOUDINI" = "true" ]; then \
+    if [ ! -d "./houdini_install/${HOU_INSTALL_LOCATION}/build" ]; then \
         echo "Downloading houdini..." && \
         pip install --upgrade --no-cache-dir -r houdini_install/requirements_hou.txt && \
-        # Set the PYTHONPATH environment variable to include the hinstall directory
-        python3 houdini_install/scripts/hou_install.py; \
+        python3 houdini_install/scripts/hou_install.py $HFS_VER; \
     else \
-        echo "Skipping Houdini download and copying from default location." && \
+        echo "Houdini build folder exists. Skipping download." && \
         cp -r ./houdini_install/hou_download/build /houdini/build; \
     fi
 
@@ -25,8 +31,10 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Bring over the Houdini download from the previous stage.
 COPY --from=houdini-downloader /houdini /houdiniInstaller
 COPY --from=houdini-downloader /code/houdini_install/requirements_app.txt .
+
 RUN python3.9 -m pip install --upgrade --no-cache-dir -r requirements_app.txt
 
 ARG EULA_DATE="2021-10-13"
@@ -41,23 +49,23 @@ COPY scripts/setup_hserver.sh /root/
 RUN touch /usr/lib/sesi/licenses && \
     chmod +x /root/setup_hserver.sh
 
-# Set environment variables
+# Pass environment variables defined in the user's .env file.
 ARG SIDEFX_SECRET
 ARG SIDEFX_CLIENT
 ARG HFS_VER
 ENV SIDEFX_CLIENT=$SIDEFX_CLIENT SIDEFX_SECRET=$SIDEFX_SECRET HFS_TARGET=$HFS_VER \
     PATH="${PATH}:/opt/houdini/build/houdini/sbin:/opt/houdini/build/bin" \
-    PYTHONPATH="${PYTHONPATH}:/opt/houdini/build/houdini/python3.9libs:/usr/local/lib/python3.9/site-packages:/usr/local/lib64/python3.9/site-packages"
+    PYTHONPATH="${PYTHONPATH}:/opt/houdini/build/houdini/python3.9libs:/usr/local/lib/python3.9/site-packages:/usr/local/lib64/python3.9/site-packages" \
+    LD_PRELOAD="/opt/houdini/build/dsolib/libjemalloc.so"
 
-ENV LD_PRELOAD="/opt/houdini/build/dsolib/libjemalloc.so"
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        ocl-icd-libopencl1 \
-        opencl-headers \
-        clinfo && \
-    rm -rf /var/lib/apt/lists/*
-RUN mkdir -p /etc/OpenCL/vendors && \
+# Install the required libs for OpenCL, then point OpenCL to the correct implementation.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ocl-icd-libopencl1 opencl-headers clinfo && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /etc/OpenCL/vendors && \
     echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
+
+# Expose all available GPU devices to the docker container.
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 

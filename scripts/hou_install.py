@@ -9,7 +9,7 @@ import requests
 from tqdm import tqdm
 from dotenv import load_dotenv
 
-import util.sidefx as sidefx
+import sidefx
 
 logging.basicConfig(level=logging.INFO)
 
