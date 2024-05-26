@@ -72,7 +72,7 @@ export async function handleStoredModels() {
 
 	const userUuid = localStorage.getItem('userUuid');
 	if (userUuid !== null) {
-		console.log('The user UUID is:', userUuid);
+		console.debug('The user UUID is:', userUuid);
 
 		try {
 			const response = await fetch(
@@ -87,7 +87,7 @@ export async function handleStoredModels() {
 			if (data.model_data) {
 				populateFiles(data.model_data);
 			} else {
-				console.log(data.message);
+				console.error(data.message);
 				handleEmptyModelData();
 			}
 		} catch (error) {

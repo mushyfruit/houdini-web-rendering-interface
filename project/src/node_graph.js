@@ -62,20 +62,12 @@ class NodeManager {
 
 	getDefaultStart() {
 		// Allow for global override.
-		if (!this.globalDefaultStart) {
-			return this.fileDefaultStart;
-		} else {
-			return this.globalDefaultStart;
-		}
+		return this.globalDefaultStart || this.fileDefaultStart;
 	}
 
 	getDefaultEnd() {
 		// Allow for global override.
-		if (!this.globalDefaultEnd) {
-			return this.fileDefaultEnd;
-		} else {
-			return this.globalDefaultEnd;
-		}
+		return this.globalDefaultEnd || this.fileDefaultEnd;
 	}
 
 	addRender(renderedFilename, nodePath, frameRange) {
@@ -92,9 +84,7 @@ class NodeManager {
 
 	setFileUUID(fileUUID) {
 		this.latestFileUUID = fileUUID;
-		if (this.nodeStateCache) {
-			this.nodeStateCache.clear();
-		}
+		this.nodeStateCache.clear();
 	}
 
 	updateContext(nodeContext) {
@@ -106,13 +96,7 @@ class NodeManager {
 	}
 
 	updateNodeStateCache(nodePath, key, value) {
-		let nodeState;
-
-		if (this.nodeStateCache.has(nodePath)) {
-			nodeState = this.nodeStateCache.get(nodePath);
-		} else {
-			nodeState = new NodeState();
-		}
+		const nodeState = this.nodeStateCache.get(nodePath) || new NodeState();
 
 		if (key in nodeState) {
 			nodeState[key] = value;
@@ -726,17 +710,12 @@ function handleRenderUpdate(data) {
 }
 
 function handleThumbUpdate(data) {
-	// Pass data to the rendered "page"
-	// Just pass the data there.
-	// Update underlying data structure?
-	console.log(data);
+	console.debug(data);
 }
 
 function handleThumbFinish(data) {
 	const route = data.staticRoute || DEFAULT_THUMBNAIL_ROUTE;
-	console.log(route);
 	const thumbUrl = route + data.fileName;
-	console.log(thumbUrl);
 	nodeGraphManager.updateNodeStateCache(data.nodePath, 'thumbnail', thumbUrl);
 
 	const thumbnail = document.querySelector(`#node-thumbnail[data-node-path="${data.nodePath}"]`);
@@ -919,10 +898,6 @@ async function updateGraph(cy, nodeName, file_uuid = globalFileUuid, store_view_
 	}
 
 	try {
-		let initialize_hip = false;
-		if (globalFileUuid == null) {
-			initialize_hip = true;
-		}
 		globalFileUuid = file_uuid;
 		const response = await fetch(`/node_data?uuid=${file_uuid}&name=${nodeName}`);
 

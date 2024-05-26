@@ -643,7 +643,9 @@ function fallbackCopy(textToCopy) {
 	try {
 		document.execCommand('copy');
 		showCopiedPopper();
-	} catch (err) {}
+	} catch (err) {
+		console.error('Could not copy text: ', err);
+	}
 	document.body.removeChild(textarea);
 }
 
@@ -1116,7 +1118,7 @@ export function loadModel(fileName, frameRange, root_url = DEFAULT_MODEL_ROUTE) 
 				mesh.actionManager = new BABYLON.ActionManager(sceneManager.scene);
 				mesh.actionManager.registerAction(
 					new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickTrigger, () =>
-						console.log('Clicked the model...'),
+						console.debug('Clicked the model...'),
 					),
 				);
 			});
@@ -1124,7 +1126,7 @@ export function loadModel(fileName, frameRange, root_url = DEFAULT_MODEL_ROUTE) 
 			toggleWireframe(globalSettings.guiParams.displayBindings.wireframe);
 		})
 		.catch((error) => {
-			console.log('Error loading the GLB file:', error);
+			console.error('Error loading the GLB file:', error);
 		});
 
 	if (!sceneManager.isDefaultSkyboxLoaded) {

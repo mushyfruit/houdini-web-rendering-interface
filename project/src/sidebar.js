@@ -16,10 +16,9 @@ class globalExportSettings {
 	}
 
 	updateSetting(key, value) {
-		if ((!key) in this.exportParams) {
+		if (!(key in this.exportParams)) {
 			return;
 		}
-
 		this.exportParams[key] = value;
 	}
 
@@ -38,7 +37,7 @@ class globalExportSettings {
 const exportSettings = new globalExportSettings();
 export { exportSettings };
 
-document.addEventListener('DOMContentLoaded', (event) => {
+document.addEventListener('DOMContentLoaded', () => {
 	getUserID();
 	connectFileInput();
 	toggleSidebar();
@@ -77,7 +76,6 @@ function resizeIcons() {
 		// Reset to max size if no overflow
 		icons.forEach((icon) => {
 			icon.style.fontSize = `${maxIconSize}px`;
-			icon.style.fontSize = `${maxIconSize}px`;
 		});
 		links.forEach((icon) => {
 			icon.style.paddingBottom = `${maxPadding}px`;
@@ -97,11 +95,11 @@ function getUserID() {
 			.then((data) => {
 				userUuid = data.user_uuid;
 				localStorage.setItem('userUuid', userUuid);
-				console.log('New user UUID generated and stored:', userUuid);
+				console.debug('New user UUID generated and stored:', userUuid);
 			})
 			.catch((error) => console.error('Error generating UUID:', error));
 	} else {
-		console.log('Found existing UUID for the user:', userUuid);
+		console.debug('Found existing UUID for the user:', userUuid);
 
 		// Retrieve the csrfToken as we're making a state-changing request.
 		const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');

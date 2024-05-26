@@ -230,8 +230,7 @@ def can_enter_node(node):
 
 def get_last_cooktime(node):
     cached_data = node.cachedUserDataDict()
-    if "cook_time" not in cached_data:
-        return None
+    return cached_data.get("cook_time", None)
 
 
 def is_node_cookable(node, parent_category_name):

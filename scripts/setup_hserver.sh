@@ -15,7 +15,7 @@ echo "Server started successfully."
 
 cd /opt/houdini/build/
 source ./houdini_setup
-cd -
+cd - > /dev/null 2>&1
 
 echo "Houdini setup sourced successfully."
 
