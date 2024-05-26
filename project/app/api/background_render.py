@@ -1,11 +1,96 @@
+import os
 import math
 import json
+import uuid
 import logging
+from pathlib import Path
 
 import hou
 
 from app.api import progress_filter
 from app import redis_client, constants as cnst
+
+
+def generate_render_path(original_render_path, out_node, file_uuid, force_png=False):
+    render_id = str(uuid.uuid4())
+    path = Path(original_render_path)
+    original_file_name = path.stem + path.suffix
+
+    target_path = os.path.join(cnst.USER_RENDER_DIR, render_id, original_file_name)
+
+    if "$HIPNAME" in target_path:
+        # Manually replace as our hip gets saved to an UUID.
+        original_hip_name = redis_client.get_hip_name_from_uuid(file_uuid)
+        if original_hip_name:
+            target_path = target_path.replace("$HIPNAME", original_hip_name.split(".")[0])
+
+    # Replacement can be strange at times.
+    if "$OS" in target_path:
+        target_path = target_path.replace("$OS", out_node.name())
+
+    if force_png:
+        target_path = os.path.join(cnst.USER_THUMB_DIR, render_id + ".png")
+
+    return target_path, render_id
+
+
+def render_rop(render_data, hip_path, force_png=False):
+    hou.hipFile.load(hip_path, suppress_save_prompt=True, ignore_load_warnings=True)
+    out_node_path = render_data["node_path"]
+    out_node = hou.node(out_node_path)
+
+    out_node.setCachedUserData("socket_id", render_data["socket_id"])
+
+    out_path = None
+    for parm_name in cnst.FILE_OUTPUT_PARMS:
+        parm = out_node.parm(parm_name)
+        if parm is not None:
+            out_path = parm.unexpandedString()
+            logging.info("Rendering to: {0}".format(out_path))
+
+    if not out_path:
+        return
+
+    updated_render_path, render_id = generate_render_path(out_path, out_node,
+                                                          render_data["file_uuid"],
+                                                          force_png=force_png)
+    frame_range_tuple = (render_data["start"], render_data["end"])
+
+    if force_png:
+        render_data["thumbnail_path"] = hou.text.expandString(updated_render_path)
+        out_node.addRenderEventCallback(update_progress)
+        out_node.setCachedUserData("rop_data", render_data)
+        frame_range_tuple = (render_data["start"], render_data["start"])
+
+    redis_instance = redis_client.get_client_instance()
+    stream_filter = progress_filter.ProgressFilter(
+        redis_instance, render_data["socket_id"], out_node_path,
+        channel=cnst.PublishChannels.glb_progress
+    )
+    try:
+        with stream_filter:
+            out_node.render(
+                frame_range_tuple,
+                output_file=updated_render_path,
+                verbose=True,
+                output_progress=True)
+    except hou.OperationFailed as exc:
+        logging.error(exc)
+    else:
+        if not force_png:
+            on_completion_notification(out_node_path,
+                                       hou.text.expandString(updated_render_path),
+                                       cnst.BackgroundRenderType.rop_render,
+                                       render_id,
+                                       (render_data["start"], render_data["end"]),
+                                       socket_id=render_data["socket_id"],
+                                       rop_uuid_prefix=render_id)
+    finally:
+        if force_png:
+            out_node.removeRenderEventCallback(update_progress)
+        out_node.destroyCachedUserData("socket_id", must_exist=False)
+        out_node.destroyCachedUserData("rop_render", must_exist=False)
+        out_node.destroyCachedUserData("rop_data", must_exist=False)
 
 
 def render_glb(render_data, hip_path):
@@ -24,15 +109,19 @@ def render_glb(render_data, hip_path):
 
     is_manager = render_node.type().isManager()
     render_path = node_path
-    if render_node.type().category() != hou.sopNodeTypeCategory() and not is_manager:
-        if not render_node.renderNode():
-            logging.error("No render node specified for {0}".format(node_path))
-            return False
 
-    out_node = hou.node("/out/{0}".format(cnst.GLB_ROP))
-    if out_node is None:
-        out_node = hou.node("/out").createNode("gltf")
-        out_node.setName(cnst.GLB_ROP)
+    if render_node.type().category() != hou.ropNodeTypeCategory():
+        if render_node.type().category() != hou.sopNodeTypeCategory() and not is_manager:
+            if not render_node.renderNode():
+                logging.error("No render node specified for {0}".format(node_path))
+                return False
+
+        out_node = hou.node("/out/{0}".format(cnst.GLB_ROP))
+        if out_node is None:
+            out_node = hou.node("/out").createNode("gltf")
+            out_node.setName(cnst.GLB_ROP)
+    else:
+        out_node = render_node
 
     # Set up the GLTF ROP Node.
     category = render_node.type().category()
@@ -51,6 +140,7 @@ def render_glb(render_data, hip_path):
 
     # Store the redis socket ID for retrieval in callback.
     out_node.setCachedUserData("socket_id", render_data["socket_id"])
+    out_node.setCachedUserData("target_node", render_path)
 
     out_node.addRenderEventCallback(update_progress)
 
@@ -67,7 +157,6 @@ def render_glb(render_data, hip_path):
                                    socket_id=render_data["socket_id"])
     finally:
         out_node.removeRenderEventCallback(update_progress)
-        out_node.destroyCachedUserData("parent_path", must_exist=False)
         out_node.destroyCachedUserData("socket_id", must_exist=False)
 
 
@@ -101,7 +190,7 @@ def prepare_gltf_rop(out_node, category, is_manager, render_data, render_path, g
         out_node.parm("usesoppath").set(False)
         out_node.parm("soppath").set('')
         out_node.parm("objpath").set(render_path)
-    else:
+    elif category != hou.ropNodeTypeCategory():
         # Set up the GLTF ROP Node.
         out_node.parm("usesoppath").set(True)
         out_node.parm("soppath").set(render_path)
@@ -116,12 +205,7 @@ def prepare_gltf_rop(out_node, category, is_manager, render_data, render_path, g
 
     # Directly set, rather than passing `frame_range` in render call
     # Useful to query "f2" to determine progress in callback.
-    frames = (render_data["start"], render_data["end"], render_data["step"])
-    for i in range(3):
-        index_str = str(i + 1)
-        f_parm = out_node.parm("f{0}".format(index_str))
-        f_parm.deleteAllKeyframes()
-        f_parm.set(frames[i])
+    _set_frame_data(out_node, render_data)
 
     export_settings = render_data["export_settings"]
     for parmName, value in export_settings.items():
@@ -135,11 +219,23 @@ def prepare_gltf_rop(out_node, category, is_manager, render_data, render_path, g
 def update_progress(rop_node, render_event_type, time):
     # Update the correct loading bar with "data-node-name" attribute via `nodeName`.
     if render_event_type == hou.ropRenderEventType.PostFrame:
+        if rop_node.cachedUserData("rop_data"):
+            rop_data = rop_node.cachedUserData("rop_data")
+            if hou.intFrame() == rop_data["start"]:
+                on_completion_notification(
+                    rop_data["node_path"],
+                    hou.expandStringAtFrame(rop_data["thumbnail_path"], hou.intFrame()),
+                    cnst.BackgroundRenderType.thumbnail,
+                    rop_data["file_uuid"],
+                    None,
+                    socket_id=rop_data["socket_id"])
+            return
 
-        if rop_node.parm("usesoppath").eval():
-            render_node_path = rop_node.parm("soppath").evalAsNode().path()
         else:
-            render_node_path = rop_node.parm("objpath").evalAsNode().path()
+            if rop_node.cachedUserData("target_node"):
+                render_node_path = rop_node.cachedUserData("target_node")
+            else:
+                render_node_path = rop_node.path()
 
         end_frame = rop_node.parm("f2").evalAsFloat()
         progress = (hou.intFrame() / end_frame) * 100.0
@@ -201,7 +297,7 @@ def render_thumbnail_with_karma(node_path, camera_path, thumbnail_path,
         out_node.render(verbose=True, output_progress=True)
 
 
-def generate_thumbnail(render_data, hip_path):
+def generate_thumbnail(render_data, hip_path, generate_for_rop=False):
     """OpenGL isn't available with current Docker setup (no GPU).
 
     Instead, render via Karma CPU in separate celery Task.
@@ -222,6 +318,23 @@ def generate_thumbnail(render_data, hip_path):
         out_camera.parm("focal").set(200)
 
     render_obj = hou.node(render_data["node_path"])
+    if render_obj.type().category() == hou.ropNodeTypeCategory():
+        obj_parm = render_obj.parm("objpath")
+        sop_parm = render_obj.parm("soppath")
+        if obj_parm is None:
+            if sop_parm:
+                render_obj = sop_parm.evalAsNode()
+        elif obj_parm.isDisabled() and sop_parm is not None:
+            render_obj = sop_parm.evalAsNode()
+        elif sop_parm is not None:
+            render_obj = obj_parm.evalAsNode()
+
+    if render_obj is None and generate_for_rop:
+        # Fallback to just generating a thumbnail for the obj context.
+        render_obj = hou.node("/obj")
+    elif render_obj is None:
+        logging.error("Error encountered when attempting to render {0}. "
+                      "Invalid render object specified.".format(render_data["node_path"]))
 
     with RenderContextManager(render_obj):
         # Need a SOP node to calculate the OBJ's bbox.
@@ -337,7 +450,8 @@ def on_completion_notification(node_path,
                                render_type,
                                file_uuid,
                                frames,
-                               socket_id=None):
+                               socket_id=None,
+                               rop_uuid_prefix=None):
     if socket_id is None:
         completed_render_node = hou.node(node_path)
         if completed_render_node is None:
@@ -356,12 +470,24 @@ def on_completion_notification(node_path,
         "frame_info": frames
     }
 
+    if rop_uuid_prefix:
+        render_completion_data["rop_uuid"] = rop_uuid_prefix
+
     render_update_json = json.dumps(render_completion_data)
     logging.info("Render Completion Published: {0}".format(render_update_json))
 
     redis_instance = redis_client.get_client_instance()
     redis_instance.publish(cnst.PublishChannels.render_completion,
                            render_update_json)
+
+
+def _set_frame_data(out_node, render_data):
+    frames = (render_data["start"], render_data["end"], render_data["step"])
+    for i in range(3):
+        index_str = str(i + 1)
+        f_parm = out_node.parm("f{0}".format(index_str))
+        f_parm.deleteAllKeyframes()
+        f_parm.set(frames[i])
 
 
 class RenderContextManager:

@@ -846,6 +846,44 @@ label[for="start-frame"] {
     max-width: 1100px;
 }
 
+.other-contexts-menu {
+    display: none;
+    position: absolute;
+    background-color: #3c3c3c;
+    color: white;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    width: 100px;
+    padding: 2px 0;
+}
+
+.other-contexts-menu ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.other-contexts-menu ul li {
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    padding: 1px;
+    cursor: pointer;
+}
+
+.other-contexts-menu ul li:hover {
+    background-color: #e76f00;
+}
+
+.other-contexts-menu ul li img {
+    margin-left: 6px;
+    margin-right: 6px;
+    width: 16px;
+    height: 16px;
+}
+
 
 @media (max-width: 600px) {
     .sidebar {

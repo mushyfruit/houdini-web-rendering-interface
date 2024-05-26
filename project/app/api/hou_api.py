@@ -70,6 +70,17 @@ def process_hip_for_node_structure(root_node):
                                   parent=True)
             current_node = current_node.parent()
 
+        for default_context in cnst.DEFAULT_PARENT_CONTEXTS:
+            if default_context not in node_dict["parent_icons"]:
+                out_node = hou.node(default_context)
+                if out_node is not None:
+                    locate_and_store_icon(contents,
+                                          out_node.name(),
+                                          out_node.type().icon(),
+                                          zip_file,
+                                          node_dict,
+                                          parent=True)
+
         for node in root_node.children():
             node_info = {
                 "data": {
@@ -133,7 +144,6 @@ def locate_and_store_icon(contents,
                 elif potential_paths:
                     icon_path = potential_paths[0]
 
-
     if icon_path in contents:
         with zip_file.open(icon_path) as icon:
             icon_content = icon.read()
@@ -146,8 +156,6 @@ def locate_and_store_icon(contents,
 
 
 def submit_node_for_render(render_struct):
-    """
-    """
     global _redis_thread
     if not _redis_thread:
         _redis_thread = threading.Thread(
@@ -159,13 +167,36 @@ def submit_node_for_render(render_struct):
     # Celery automatically serializes arguments via JSON.
     # Ensure we first convert the RenderStruct to dictionary.
 
-    # Run the .glb render background process.
-    tasks.run_render_task.delay(render_struct._asdict(), hip_path)
+    render_node = hou.node(render_struct.node_path)
+    if render_node.type().category() == hou.ropNodeTypeCategory() and \
+            render_node.type().name() != "gltf":
+        # Execute the render ROP in a background process.
+        if rop_can_generate_thumbnail(render_struct):
+            tasks.execute_render_rop.delay(render_struct._asdict(), hip_path, generate_thumbnail=True)
+        else:
+            tasks.execute_render_rop.delay(render_struct._asdict(), hip_path)
 
-    # Run the thumbnail background process.
-    tasks.run_thumbnail_task.delay(render_struct._asdict(), hip_path)
+            # This ROP can't generate a thumbnail on its own. (Not a 2D image ROP)
+            # Create a new thumbnail task to handle that for us.
+            print("calling the thumbnail task")
+            tasks.run_thumbnail_task.delay(render_struct._asdict(), hip_path, generate_for_rop=True)
+    else:
+        # Run the .glb render background process.
+        tasks.run_render_task.delay(render_struct._asdict(), hip_path)
+
+        # Run the thumbnail background process.
+        tasks.run_thumbnail_task.delay(render_struct._asdict(), hip_path)
 
     return True
+
+
+def rop_can_generate_thumbnail(render_struct):
+    test_node = hou.node(render_struct.node_path)
+    for parm_name in cnst.ROP_THUMBNAIL_REQUIRED_PARMS:
+        parm = test_node.parm(parm_name)
+        if parm is not None:
+            return True
+    return False
 
 
 def load_icon_mappings(zip_file):
@@ -209,6 +240,10 @@ def is_node_cookable(node, parent_category_name):
         # but let the users render anyway.
         return True, ''
 
+    # Will attempt to render all ROP's, can't promise they'll work though.
+    if parent_category_name == hou.ropNodeTypeCategory():
+        return True, ''
+
     if parent_category_name == hou.objNodeTypeCategory():
         # Perform basic validation:
         node_type_name = node.type().name()
@@ -233,8 +268,8 @@ def is_node_cookable(node, parent_category_name):
 
         return True, ''
 
-    # Only OBJ and SOPs are supported ATM.
-    error_msg = "Only OBJ and SOP context nodes are renderable."
+    # Only OBJ, SOP, and ROP's are supported at the moment.
+    error_msg = "Only OBJ, SOP, and ROP context nodes are renderable."
     return False, error_msg
 
 

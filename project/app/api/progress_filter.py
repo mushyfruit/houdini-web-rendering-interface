@@ -21,11 +21,12 @@ class ProgressFilter:
 
     _escape_char = "\b"
 
-    def __init__(self, redis_client, socket_id, node_path, stream=None):
+    def __init__(self, redis_client, socket_id, node_path, stream=None, channel=cnst.PublishChannels.thumb_progress):
         self._orig_stream = stream
         self._redis_client = redis_client
         self._socket_id = socket_id
         self._node_path = node_path
+        self._channel = channel
         self._regex = re.compile(r'ALF_PROGRESS (\d+)%')
         if not self._orig_stream:
             self._orig_stream = sys.__stdout__
@@ -102,8 +103,11 @@ class ProgressFilter:
                 "nodePath": self._node_path
             }
 
-            self._redis_client.publish(cnst.PublishChannels.thumb_progress,
-                                       json.dumps(json_data))
+            # Conform the json data to match the desired fields.
+            if self._channel != cnst.PublishChannels.thumb_progress:
+                json_data["render_node_path"] = self._node_path
+
+            self._redis_client.publish(self._channel, json.dumps(json_data))
         except Exception as e:
             logging.error("Error in update_redis_client: {0}".format(e))
 

@@ -11,6 +11,7 @@ class Config(object):
 
     BASE_DIR = "/var/model_storage"
     STATIC_FOLDER = os.path.join(BASE_DIR, 'static')
+    USER_RENDER_DIR = os.path.join(STATIC_FOLDER, 'user_renders')
 
     # Mounted volume between celery and houdini server.
     UPLOAD_FOLDER = "/root/hip_storage"

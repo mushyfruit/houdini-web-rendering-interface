@@ -3,6 +3,8 @@ import { createThumbnail } from './stored_models.js';
 import { DEFAULT_THUMBNAIL_ROUTE } from './constants';
 import { exportSettings } from './sidebar.js';
 
+let holdTimer = null;
+let isContextMenuListenerAdded = false;
 let globalFileUuid = null;
 let poppers = {};
 const appState = {
@@ -20,6 +22,7 @@ class NodeState {
 		this.endFrame = null;
 	}
 }
+
 class NodeManager {
 	constructor() {
 		this.renders = {};
@@ -240,7 +243,6 @@ export async function restoreNodeGraphState(nanoid) {
 		}
 		const data = await response.json();
 		nodeGraphManager.setFileUUID(data.hip_uuid);
-		console.log(`Setting: ${data.hip_uuid}`);
 	} catch (error) {
 		console.error('Unable to find an associated hip file for nano id:', error);
 	}
@@ -439,6 +441,8 @@ function generateContextButtons(cy, full_context, parent_icons) {
 
 	// Accumulate path per button as we iterate.
 	let runningPath = '';
+	const contextMenu = document.querySelector('.other-contexts-menu');
+
 	filteredContexts.forEach((context, index) => {
 		runningPath += '/' + context;
 		const button = document.createElement('button');
@@ -465,20 +469,116 @@ function generateContextButtons(cy, full_context, parent_icons) {
 			}
 		}
 
-		button.addEventListener('click', function (event) {
-			const nodeName = event.target.getAttribute('nodeFullPath');
-			updateGraph(cy, nodeName).then((nodeData) => {
-				cy.elements().remove();
-				deletePoppers();
-				displayNodeContext(cy, nodeName, nodeData);
-			});
-		});
-
+		if (index === 0) {
+			setupRootContextListener(button, contextMenu, parent_icons, container, cy);
+		} else {
+			setupChildListener(button, cy);
+		}
 		container.appendChild(button);
 	});
 
+	// Ensure the context menu closes after any click event if it's opened.
+	if (!isContextMenuListenerAdded) {
+		document.addEventListener('mousedown', function () {
+			if (contextMenu.style.display === 'block') {
+				contextMenu.style.display = 'none';
+			}
+		});
+		contextMenu.addEventListener('mousedown', function (event) {
+			event.stopPropagation();
+		});
+		isContextMenuListenerAdded = true;
+	}
+
 	const buttonContainer = document.getElementById('context-display');
 	buttonContainer.appendChild(container);
+}
+
+function setupRootContextListener(button, contextMenu, parentIcons, container, cy) {
+	// Mirror houdini behavior launching "Other Networks" panel.
+	// As for now, only supporting OBJ, SOP, and ROP contexts.
+	button.addEventListener('mousedown', function (event) {
+		const nodeName = event.target.getAttribute('nodeFullPath');
+		if (event.target.getAttribute('isRoot')) {
+			if (contextMenu.style.display === 'block') {
+				contextMenu.style.display = 'none';
+				event.stopPropagation();
+				return;
+			}
+
+			if (container.children.length === 1) {
+				showContextMenu(event, contextMenu, parentIcons, cy, nodeName);
+			} else {
+				holdTimer = setTimeout(() => {
+					showContextMenu(event, contextMenu, parentIcons, cy, nodeName);
+				}, 500);
+			}
+		}
+	});
+
+	button.addEventListener('mouseup', function () {
+		clearTimeout(holdTimer);
+		const nodeName = event.target.getAttribute('nodeFullPath');
+		updateGraph(cy, nodeName).then((nodeData) => {
+			cy.elements().remove();
+			deletePoppers();
+			displayNodeContext(cy, nodeName, nodeData);
+		});
+	});
+}
+
+function setupChildListener(button, cy) {
+	button.addEventListener('mousedown', function (event) {
+		const nodeName = event.target.getAttribute('nodeFullPath');
+		updateGraph(cy, nodeName).then((nodeData) => {
+			cy.elements().remove();
+			deletePoppers();
+			displayNodeContext(cy, nodeName, nodeData);
+		});
+	});
+}
+
+function showContextMenu(event, contextMenu, parentIcons, cy, nodeName) {
+	contextMenu.style.top = `${event.clientY + window.scrollY}px`;
+	contextMenu.style.left = `${event.clientX + window.scrollX}px`;
+	contextMenu.style.display = 'block';
+
+	if (nodeName === '/obj') {
+		// Create //out
+		createContextMenuEntry(contextMenu, parentIcons, cy, 'out');
+	} else {
+		// Create //obj
+		createContextMenuEntry(contextMenu, parentIcons, cy, 'obj');
+	}
+
+	event.stopPropagation();
+}
+
+function createContextMenuEntry(contextMenu, parentIcons, cy, contextToCreate) {
+	const ul = contextMenu.querySelector('ul');
+	ul.innerHTML = '';
+
+	const li = document.createElement('li');
+	const img = document.createElement('img');
+
+	if (parentIcons[contextToCreate]) {
+		img.src = parentIcons[contextToCreate];
+	}
+
+	li.appendChild(img);
+	li.appendChild(document.createTextNode(contextToCreate));
+	ul.appendChild(li);
+
+	li.addEventListener('click', function (event) {
+		const targetContext = `/${contextToCreate}`;
+		// Hide the menu before jumping contexts.
+		contextMenu.style.display = 'none';
+		updateGraph(cy, targetContext).then((nodeData) => {
+			cy.elements().remove();
+			deletePoppers();
+			displayNodeContext(cy, targetContext, nodeData);
+		});
+	});
 }
 
 function buildPopperDiv(node) {
@@ -613,6 +713,7 @@ function registerEventListeners() {
 	appState.socket.on('node_thumb_progress_channel', handleThumbUpdate);
 	appState.socket.on('node_thumb_finish_channel', handleThumbFinish);
 	appState.socket.on('node_render_finish_channel', handleRenderFinish);
+	appState.socket.on('render_rop_finish_channel', handleRopFinish);
 }
 
 function handleRenderUpdate(data) {
@@ -632,7 +733,10 @@ function handleThumbUpdate(data) {
 }
 
 function handleThumbFinish(data) {
-	const thumbUrl = DEFAULT_THUMBNAIL_ROUTE + data.fileName;
+	const route = data.staticRoute || DEFAULT_THUMBNAIL_ROUTE;
+	console.log(route);
+	const thumbUrl = route + data.fileName;
+	console.log(thumbUrl);
 	nodeGraphManager.updateNodeStateCache(data.nodePath, 'thumbnail', thumbUrl);
 
 	const thumbnail = document.querySelector(`#node-thumbnail[data-node-path="${data.nodePath}"]`);
@@ -667,6 +771,29 @@ function handleRenderFinish(data) {
 	nodeGraphManager.addRender(data.fileName, data.nodePath, data.frameRange);
 	nodeGraphManager.updateNodeStateCache(data.nodePath, 'has_cooked', true);
 	handlePostRender(data.nodePath);
+}
+
+function handleRopFinish(data) {
+	// Trigger a download of the zipped files in the directory.
+	if (!data.fileName) {
+		console.error('No valid filename returned on ROP finish!');
+	}
+
+	handlePostRender(data.nodePath);
+
+	fetch(`/download_rendered_sequence_zip?filename=${encodeURIComponent(data.fileName)}`)
+		.then((response) => response.blob())
+		.then((blob) => {
+			const url = window.URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.style.display = 'none';
+			a.href = url;
+			a.download = 'output.zip';
+			document.body.appendChild(a);
+			a.click();
+			window.URL.revokeObjectURL(url);
+		})
+		.catch((err) => console.error('Error downloading the zip file:', err));
 }
 
 function startRenderTask(node) {

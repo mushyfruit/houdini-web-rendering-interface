@@ -112,11 +112,19 @@ def handle_render_completion(message_data):
         channel = cnst.PublishChannels.node_render_finished
     elif render_type == cnst.BackgroundRenderType.thumbnail:
         channel = cnst.PublishChannels.node_thumb_finished
+    elif render_type == cnst.BackgroundRenderType.rop_render:
+        channel = cnst.PublishChannels.render_rop_finished
     else:
         logger.error("Unknown render type: {0}".format(render_type))
         return
 
     filename = render_completion_data["render_file_path"].split(os.sep)[-1]
+    if render_type == cnst.BackgroundRenderType.rop_render:
+        filename = render_completion_data.get("rop_uuid", None)
+        if filename is None:
+            logger.error("Render UUID has not provided "
+                         "for {0}".format(render_completion_data["render_file_path"]))
+            return
 
     formatted_frame_string = None
     if render_type == cnst.BackgroundRenderType.glb_file:
@@ -132,7 +140,7 @@ def handle_render_completion(message_data):
     render_completion_dict = {
         'hipFile': render_completion_data["file_uuid"],
         'fileName': filename,
-        'nodePath': render_completion_data["render_node_path"],
+        'nodePath': render_completion_data["render_node_path"]
     }
 
     if render_type == cnst.BackgroundRenderType.glb_file:

@@ -3,6 +3,7 @@ import os
 import glob
 import uuid
 import time
+import zipfile
 from nanoid import generate
 
 from app import redis_client
@@ -10,7 +11,8 @@ from app.main import bp
 from app.api import hou_api
 from app.constants import CURRENT_FILE_UUID
 from flask import (current_app, render_template,
-                   url_for, redirect, jsonify, request, session, send_from_directory)
+                   url_for, redirect, jsonify, request,
+                   session, send_from_directory, send_file)
 from werkzeug.utils import secure_filename
 
 temporary_links = {}
@@ -134,6 +136,24 @@ def retrieve_file_from_nano_id(nano_id, redirect_request=True):
         return get_glb_file(filename)
     else:
         return filename
+
+
+@bp.route("/download_rendered_sequence_zip", methods=["GET"])
+def download_rendered_sequence_zip():
+    filename = request.args.get('filename')
+    if not filename:
+        return jsonify({"message": "No valid filename was provided to download."}), 400
+
+    file_uuid = filename.split(".")[0]
+    directory = os.path.join(current_app.config['USER_RENDER_DIR'], file_uuid)
+
+    files = glob.glob(os.path.join(directory, '*'))
+    zip_path = os.path.join(directory, "{0}.zip".format(file_uuid))
+    with zipfile.ZipFile(zip_path, 'w') as zipf:
+        for file in files:
+            zipf.write(file, os.path.basename(file))
+
+    return send_file(zip_path, as_attachment=True)
 
 
 @bp.route("/get_file_uuid_from_nano", methods=["GET"])
