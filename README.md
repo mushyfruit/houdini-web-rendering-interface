@@ -4,6 +4,10 @@ This project combines a dockerized implementation of Houdini with a user-friendl
 The Houdini web-app is designed to interact with a HIP file's node graph, execute renders, and preview scene geometry
 from your web browser.
 
+
+https://github.com/mushyfruit/houdini-web-rendering-interface/assets/73495888/6d22d45b-13d1-45f4-8dec-a68ec612e9f2
+
+
 ## Features
 
 - **Dockerized Houdini**: Simplified setup and deployment using Docker containers.
