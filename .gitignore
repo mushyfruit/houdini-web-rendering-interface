@@ -18,7 +18,7 @@ node_modules/
 
 # Vite
 # Push compiled assets for anyone to use.
-dist
+#dist
 
 # Environments
 .idea/
