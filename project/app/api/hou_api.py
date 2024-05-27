@@ -178,7 +178,6 @@ def submit_node_for_render(render_struct):
 
             # This ROP can't generate a thumbnail on its own. (Not a 2D image ROP)
             # Create a new thumbnail task to handle that for us.
-            print("calling the thumbnail task")
             tasks.run_thumbnail_task.delay(render_struct._asdict(), hip_path, generate_for_rop=True)
     else:
         # Run the .glb render background process.
