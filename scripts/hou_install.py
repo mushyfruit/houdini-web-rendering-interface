@@ -16,12 +16,19 @@ logging.basicConfig(level=logging.INFO)
 DEFAULT_DL_FOLDER = "hou_download"
 MIN_HOUDINI = 20.0
 
+# Houdini 22 removed the self-extracting `houdini.install` script. Installing now requires
+# the Houdini Installer (`houdini_installer`), which installs from the downloaded .tar.gz.
+INSTALLER_HOUDINI = 22.0
+INSTALLER_SCRIPT = "install_houdini_launcher.sh"
+HOUDINI_TARBALL = "houdini.tar.gz"
+
 
 def valid_version(version):
-    """Validate that the version downloaded supports Python3.9.
+    """Validate the requested Houdini version.
 
-    Currently, the Dockerfile.houdini and all other setup are targeting Houdini releases
-    that are built against python 3.9.
+    The Python version of the downloaded build must match the `PYTHON_VER` used by
+    Dockerfile.houdini, as the web app imports `hou` directly. By default, the
+    production build for that Houdini version is downloaded.
     """
     try:
         version_num = float(version)
@@ -51,17 +58,19 @@ def parse_args():
                         dest="product",
                         action='store',
                         type=str,
-                        help='Indicate which product to download.')
+                        help='Indicate which product to download (default: houdini).')
 
     parser.add_argument('version',
-                        help="Version of Houdini to download (>=19.5)",
+                        help="Version of Houdini to download (>=20.0)",
                         type=valid_version)
 
     return parser.parse_args()
 
 
 def fetch_or_resume(response, dl_location):
-    with open(dl_location, 'ab') as f:
+    # Only append if the server honored the Range header, otherwise start over.
+    mode = 'ab' if response.status_code == 206 else 'wb'
+    with open(dl_location, mode) as f:
         response.raw.decode_content = True
         total_size = int(response.headers.get('Content-Length', 0))
         block_size = 16384
@@ -75,7 +84,7 @@ def fetch_or_resume(response, dl_location):
     progress_bar.close()
 
 
-def download_houdini(service, args):
+def download_houdini(service, args, product):
     """Retrieve the latest build and download.
 
     latest_release = {
@@ -86,7 +95,7 @@ def download_houdini(service, args):
 
     """
     hou_response = service.download.get_daily_build_download(
-        product=args.product or 'houdini-py39',
+        product=product,
         version=str(args.version),
         build='production',
         platform='linux'
@@ -100,8 +109,6 @@ def download_houdini(service, args):
         dl_location = get_houdini_write_path(filename)
     else:
         download_folder = os.path.join(os.getcwd(), DEFAULT_DL_FOLDER)
-        if os.path.exists(download_folder) and args.clear_downloads:
-            shutil.rmtree(download_folder)
         if not os.path.exists(download_folder):
             os.makedirs(download_folder)
         dl_location = os.path.join(download_folder, filename)
@@ -123,9 +130,7 @@ def download_houdini(service, args):
             return
         return dl_location, hou_response
     else:
-        logging.info(response.status_code)
-        raise Exception("Unable to download Houdini at"
-                        f"{response['download_url']}")
+        raise Exception(f"Unable to download {filename}: HTTP {response.status_code}")
     return dl_location, hou_response
 
 
@@ -159,6 +164,20 @@ def extract_houdini_tar(download_location, args):
     logging.info(f"Extracted houdini tar file from `{extract_path}` to `{new_path}`")
 
 
+def stage_installer_files(download_location, installer_location):
+    """Move the Houdini tarball and the Houdini Installer script into `build`.
+
+    Used for Houdini 22+, where the tarball is installed via `houdini_installer`
+    rather than extracted and run with `houdini.install`.
+    """
+    new_path = os.path.join(os.path.dirname(download_location), "build")
+    ensure_empty_dir(new_path)
+
+    os.rename(download_location, os.path.join(new_path, HOUDINI_TARBALL))
+    os.rename(installer_location, os.path.join(new_path, INSTALLER_SCRIPT))
+    logging.info(f"Staged the Houdini tarball and installer in `{new_path}`")
+
+
 def ensure_empty_dir(directory):
     if os.path.exists(directory):
         shutil.rmtree(directory)
@@ -187,11 +206,28 @@ if __name__ == '__main__':
         endpoint_url="https://www.sidefx.com/api/",
     )
 
-    download_response = download_houdini(service, args)
-    if download_response:
-        download_location, hou_response = download_response
-        verify_checksum(download_location, hou_response["hash"])
-        extract_houdini_tar(download_location, args)
-    else:
+    download_folder = os.path.join(os.getcwd(), DEFAULT_DL_FOLDER)
+    if not os.environ.get("DOCKER_DL") and args.clear_downloads and os.path.exists(download_folder):
+        shutil.rmtree(download_folder)
+
+    download_response = download_houdini(service, args, args.product or 'houdini')
+    if not download_response:
         logging.error("Errors were encountered when attempting "
                       "to download Houdini.")
+        raise SystemExit(1)
+
+    download_location, hou_response = download_response
+    verify_checksum(download_location, hou_response["hash"])
+
+    if args.version < INSTALLER_HOUDINI:
+        extract_houdini_tar(download_location, args)
+    else:
+        installer_response = download_houdini(service, args, 'houdini-launcher')
+        if not installer_response:
+            logging.error("Errors were encountered when attempting "
+                          "to download the Houdini Installer.")
+            raise SystemExit(1)
+
+        installer_location, launcher_response = installer_response
+        verify_checksum(installer_location, launcher_response["hash"])
+        stage_installer_files(download_location, installer_location)

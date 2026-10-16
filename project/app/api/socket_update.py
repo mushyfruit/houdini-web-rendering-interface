@@ -1,6 +1,8 @@
 import os
 import json
+import time
 import uuid
+import redis
 from flask import request, current_app
 
 from app import socketio, redis_client, constants as cnst
@@ -11,12 +13,15 @@ logger = utils.get_logger("celery_listener")
 
 @socketio.on('submit_render_task')
 def receive_render_task(render_data):
+    if not isinstance(render_data, dict):
+        return {"message": "Invalid render submission.", "success": False}
+
     socket_id = request.sid
     start = render_data.get('start')
     end = render_data.get('end')
     step = render_data.get('step')
     node_path = render_data.get('path')
-    export_settings = render_data.get('exportSettings')
+    export_settings = render_data.get('exportSettings') or {}
 
     # Can't rely on session object for file_uuid as if HTTP route
     # make change to session, it doesn't seem to update WebSocket connection.
@@ -26,6 +31,12 @@ def receive_render_task(render_data):
     try:
         if not node_path:
             raise ValueError("Invalid submission node provided.")
+
+        frames = (start, end, step)
+        if not all(isinstance(f, (int, float)) and not isinstance(f, bool) for f in frames) or step <= 0:
+            raise ValueError("Invalid frame range provided.")
+
+        hip_path = hou_api.get_hip_path(file_uuid)
 
         render_id, glb_path, thumbnail_path = generate_uuid_filepath("glb")
         if render_id is None:
@@ -41,7 +52,7 @@ def receive_render_task(render_data):
                                               socket_id=socket_id,
                                               export_settings=export_settings)
         logger.info(render_struct)
-        result = hou_api.submit_node_for_render(render_struct)
+        result = hou_api.submit_node_for_render(render_struct, hip_path)
         if not result:
             raise RuntimeError("Render submission failed.")
     except Exception as e:
@@ -67,34 +78,42 @@ def listen_to_celery_workers():
     Completion notifications received over `render_completion_channel`
     will indicate to the user that model is being loaded in Babylon.
     """
-    _redis_client = redis_client.get_client_instance()
-    pubsub = _redis_client.pubsub()
-    pubsub.subscribe(cnst.PublishChannels.render_completion,
-                     cnst.PublishChannels.glb_progress,
-                     cnst.PublishChannels.thumb_progress)
-
     channel_handlers = {
         cnst.PublishChannels.render_completion: handle_render_completion,
         cnst.PublishChannels.glb_progress: handle_glb_progress_update,
         cnst.PublishChannels.thumb_progress: handle_thumb_progress_update,
     }
 
-    for message in pubsub.listen():
-        if message['type'] != 'message':
-            continue
+    # Keep listening if redis restarts, otherwise all future render updates are lost.
+    while True:
+        try:
+            _redis_client = redis_client.get_client_instance()
+            pubsub = _redis_client.pubsub()
+            pubsub.subscribe(*channel_handlers)
 
-        channel = message['channel'].decode('utf-8')
-        message_data = message['data'].decode('utf-8')
+            for message in pubsub.listen():
+                if message['type'] != 'message':
+                    continue
 
-        if not message_data:
-            logger.error("No message data provided "
-                         "for update: {0}".format(channel))
-            return
+                channel = message['channel'].decode('utf-8')
+                message_data = message['data'].decode('utf-8')
 
-        if channel in channel_handlers:
-            channel_handlers[channel](message_data)
-        else:
-            logger.error("Invalid channel name: {0}".format(channel))
+                if not message_data:
+                    logger.error("No message data provided "
+                                 "for update: {0}".format(channel))
+                    continue
+
+                if channel not in channel_handlers:
+                    logger.error("Invalid channel name: {0}".format(channel))
+                    continue
+
+                try:
+                    channel_handlers[channel](message_data)
+                except Exception:
+                    logger.exception("Unable to process update on: {0}".format(channel))
+        except redis.ConnectionError:
+            logger.exception("Lost connection to redis, reconnecting...")
+            time.sleep(5)
 
 
 def handle_render_completion(message_data):

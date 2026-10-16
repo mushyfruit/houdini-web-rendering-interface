@@ -21,25 +21,65 @@ enable_hou_module()
 import hou
 
 import os
+import glob
 import zipfile
 import threading
 import urllib.parse
 
+from flask import current_app
+
 from app import tasks, constants as cnst
-from app.api import socket_update
+from app.api import socket_update, utils
 
 _icon_mapping = {}
 _redis_thread = None
 
 
-def scan_and_display_nodes(parent_node, load=True, hip_file=None):
-    if load:
-        # Avoid cooking the file, only need to retrieve node graph.
-        hou.setUpdateMode(hou.updateMode.Manual)
-        hou.hipFile.load(hip_file,
-                         suppress_save_prompt=True,
-                         ignore_load_warnings=True)
-    obj_dict = process_hip_for_node_structure(hou.node(parent_node))
+def get_hip_path(file_uuid):
+    """Locate the uploaded .hip, .hiplc, or .hipnc file for the given UUID."""
+    if file_uuid == current_app.config["PLACEHOLDER_DIR"]:
+        # Make an exception if we're attempting to load placeholder.hip
+        return current_app.config["PLACEHOLDER_HIP_PATH"]
+
+    # Uploaded files are always saved as "<uuid>.<ext>".
+    if not utils.is_valid_uuid(file_uuid):
+        raise ValueError("Invalid file UUID provided.")
+
+    search_pattern = os.path.join(current_app.config['UPLOAD_FOLDER'],
+                                  "{0}.hip*".format(file_uuid))
+    matching_files = glob.glob(search_pattern)
+    if not matching_files:
+        raise ValueError("No matching files with provided UUID.")
+
+    if len(matching_files) > 1:
+        # Potentially indicates need for cleanup or strange collision issue.
+        raise ValueError("Multiple files found.")
+
+    return matching_files[0]
+
+
+def ensure_hip_loaded(hip_file):
+    """Load the .hip file unless it's already loaded.
+
+    The Houdini session is shared by every user of the web app, so a
+    different user may have loaded another file since this one was last used.
+    """
+    if os.path.abspath(hou.hipFile.path()) == os.path.abspath(hip_file):
+        return
+
+    # Avoid cooking the file, only need to retrieve node graph.
+    hou.setUpdateMode(hou.updateMode.Manual)
+    hou.hipFile.load(hip_file,
+                     suppress_save_prompt=True,
+                     ignore_load_warnings=True)
+
+
+def scan_and_display_nodes(parent_node, hip_file):
+    ensure_hip_loaded(hip_file)
+    root_node = hou.node(parent_node)
+    if root_node is None:
+        return None
+    obj_dict = process_hip_for_node_structure(root_node)
     return obj_dict
 
 
@@ -122,6 +162,10 @@ def locate_and_store_icon(contents,
                           parent=False):
     global _icon_mapping
 
+    # Custom icons (e.g. an HDA's icon given as a file path) aren't stored in icons.zip.
+    if not node_icon or "_" not in node_icon:
+        return
+
     node_type_folder, svg_name = node_icon.split("_", 1)
     icon_path = os.path.join(node_type_folder, svg_name + '.svg')
 
@@ -155,21 +199,26 @@ def locate_and_store_icon(contents,
                 node_dict["parent_icons"][node_name] = svg_xml
 
 
-def submit_node_for_render(render_struct):
+def submit_node_for_render(render_struct, hip_path):
     global _redis_thread
-    if not _redis_thread:
+    if _redis_thread is None or not _redis_thread.is_alive():
         _redis_thread = threading.Thread(
             target=socket_update.listen_to_celery_workers)
         _redis_thread.start()
 
-    hip_path = hou.hipFile.path()
+    # Another user may have loaded a different .hip file in the meantime.
+    ensure_hip_loaded(hip_path)
 
     # Celery automatically serializes arguments via JSON.
     # Ensure we first convert the RenderStruct to dictionary.
 
     render_node = hou.node(render_struct.node_path)
+    if render_node is None:
+        raise ValueError("No node found at: {0}".format(render_struct.node_path))
+
+    # Compare against the base name, newer Houdini versions name the ROP "gltf::2.0".
     if render_node.type().category() == hou.ropNodeTypeCategory() and \
-            render_node.type().name() != "gltf":
+            render_node.type().nameComponents()[2] != "gltf":
         # Execute the render ROP in a background process.
         if rop_can_generate_thumbnail(render_struct):
             tasks.execute_render_rop.delay(render_struct._asdict(), hip_path, generate_thumbnail=True)

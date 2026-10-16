@@ -10,6 +10,15 @@ import hou
 from app.api import progress_filter
 from app import redis_client, constants as cnst
 
+# Export settings from the web app mapped to the glTF ROP parameter names.
+# The "gltf::2.0" ROP renamed `customattribs` to `exportcustomattributes`.
+GLTF_EXPORT_SETTINGS = {
+    "exportmaterials": ("exportmaterials",),
+    "exportcameras": ("exportcameras",),
+    "exportlights": ("exportlights",),
+    "customattribs": ("customattribs", "exportcustomattributes"),
+}
+
 
 def generate_render_path(original_render_path, out_node, file_uuid, force_png=False):
     render_id = str(uuid.uuid4())
@@ -31,6 +40,9 @@ def generate_render_path(original_render_path, out_node, file_uuid, force_png=Fa
     if force_png:
         target_path = os.path.join(cnst.USER_THUMB_DIR, render_id + ".png")
 
+    # Not every ROP creates intermediate directories for its output.
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+
     return target_path, render_id
 
 
@@ -49,12 +61,13 @@ def render_rop(render_data, hip_path, force_png=False):
             logging.info("Rendering to: {0}".format(out_path))
 
     if not out_path:
+        logging.error("No supported output path parameter found on: {0}".format(out_node_path))
         return
 
     updated_render_path, render_id = generate_render_path(out_path, out_node,
                                                           render_data["file_uuid"],
                                                           force_png=force_png)
-    frame_range_tuple = (render_data["start"], render_data["end"])
+    frame_range_tuple = (render_data["start"], render_data["end"], render_data["step"])
 
     if force_png:
         render_data["thumbnail_path"] = hou.text.expandString(updated_render_path)
@@ -74,14 +87,17 @@ def render_rop(render_data, hip_path, force_png=False):
                 output_file=updated_render_path,
                 verbose=True,
                 output_progress=True)
-    except hou.OperationFailed as exc:
-        logging.error(exc)
+    except hou.OperationFailed:
+        logging.exception("Failed to render: {0}".format(out_node_path))
+        # Still attempt the full render if only the thumbnail failed.
+        if not force_png:
+            raise
     else:
         if not force_png:
             on_completion_notification(out_node_path,
                                        hou.text.expandString(updated_render_path),
                                        cnst.BackgroundRenderType.rop_render,
-                                       render_id,
+                                       render_data["file_uuid"],
                                        (render_data["start"], render_data["end"]),
                                        socket_id=render_data["socket_id"],
                                        rop_uuid_prefix=render_id)
@@ -118,7 +134,9 @@ def render_glb(render_data, hip_path):
 
         out_node = hou.node("/out/{0}".format(cnst.GLB_ROP))
         if out_node is None:
-            out_node = hou.node("/out").createNode("gltf")
+            # Houdini 22 resolves "gltf" to the new "gltf::2.0" ROP, which has
+            # different parameters. Explicitly create the original glTF ROP.
+            out_node = hou.node("/out").createNode("gltf", exact_type_name=True)
             out_node.setName(cnst.GLB_ROP)
     else:
         out_node = render_node
@@ -127,15 +145,11 @@ def render_glb(render_data, hip_path):
     category = render_node.type().category()
     prepare_gltf_rop(out_node, category, is_manager, render_data, render_path, glb_path)
 
-    # Bake any CHOP data on object level transforms
+    # Object-level transforms when overridden by CHOP track, will not be processed.
+    # Bake them here to ensure the transform information is passed to GLTF ROP.
     if render_node.type().isManager():
         for node in render_node.children():
             bake_object_transforms(node, render_data)
-    else:
-        bake_object_transforms(render_node, render_data)
-
-    # Object-level transforms when overridden by CHOP track, will not be processed.
-    # Bake them here to ensure the transform information is passed to GLTF ROP.
     bake_object_transforms(render_node, render_data)
 
     # Store the redis socket ID for retrieval in callback.
@@ -146,8 +160,9 @@ def render_glb(render_data, hip_path):
 
     try:
         out_node.render()
-    except hou.OperationFailed as exc:
-        logging.error(exc)
+    except hou.OperationFailed:
+        logging.exception("Failed to render GLB for: {0}".format(node_path))
+        raise
     else:
         on_completion_notification(node_path,
                                    glb_path,
@@ -198,7 +213,10 @@ def prepare_gltf_rop(out_node, category, is_manager, render_data, render_path, g
 
     logging.info("Rendering to: {0}".format(glb_path))
     out_node.parm("trange").set("normal")
-    out_node.parm('file').set(glb_path)
+
+    # A user's glTF ROP may be the newer "gltf::2.0", which renamed "file" to "outputfile".
+    file_parm = out_node.parm("file") or out_node.parm("outputfile")
+    file_parm.set(glb_path)
 
     # Default animation name appears under "Animation Folder"
     # out_node.parm('animationname').set("WebRenderDefault")
@@ -207,13 +225,21 @@ def prepare_gltf_rop(out_node, category, is_manager, render_data, render_path, g
     # Useful to query "f2" to determine progress in callback.
     _set_frame_data(out_node, render_data)
 
+    # Only allow the toggles exposed by the web app's export settings. Any other
+    # parameter (e.g. the output file or pre-render scripts) must not be settable.
     export_settings = render_data["export_settings"]
     for parmName, value in export_settings.items():
-        try:
-            out_node.parm(parmName.lower()).set(value)
-        except Exception as e:
-            logging.error("Failed to set export setting: "
-                          "{0}\n{1}".format(parmName.lower(), e))
+        parm_names = GLTF_EXPORT_SETTINGS.get(parmName.lower())
+        if parm_names is None or not isinstance(value, bool):
+            logging.error("Ignoring invalid export setting: {0}".format(parmName))
+            continue
+
+        parm = next((out_node.parm(name) for name in parm_names if out_node.parm(name)), None)
+        if parm is None:
+            logging.error("Export setting not found on {0}: {1}".format(
+                out_node.path(), parmName.lower()))
+            continue
+        parm.set(value)
 
 
 def update_progress(rop_node, render_event_type, time):
@@ -237,8 +263,12 @@ def update_progress(rop_node, render_event_type, time):
             else:
                 render_node_path = rop_node.path()
 
-        end_frame = rop_node.parm("f2").evalAsFloat()
-        progress = (hou.intFrame() / end_frame) * 100.0
+        # Progress relative to the start frame, so e.g. 1001-1100 doesn't begin at 91%.
+        start, end, step = (rop_node.parm("f{0}".format(i)).evalAsFloat() for i in (1, 2, 3))
+        frame = hou.timeToFrame(time)
+        total = round((end - start) / step) + 1 if step > 0 else 1
+        done = round((frame - start) / step) + 1 if step > 0 else 1
+        progress = max(0.0, min(100.0, (done / max(total, 1)) * 100.0))
 
         socket_id = rop_node.cachedUserData("socket_id")
         if socket_id is not None:
@@ -306,6 +336,9 @@ def generate_thumbnail(render_data, hip_path, generate_for_rop=False):
     hou.hipFile.load(
         hip_path, suppress_save_prompt=True, ignore_load_warnings=True)
 
+    # Generate the thumbnail from the first requested frame, not the frame the .hip was saved on.
+    hou.setFrame(render_data["start"])
+
     # Create and position a camera
     out_camera = hou.node("/obj/{0}".format(cnst.THUMBNAIL_CAM))
     if not out_camera:
@@ -329,12 +362,15 @@ def generate_thumbnail(render_data, hip_path, generate_for_rop=False):
         elif sop_parm is not None:
             render_obj = obj_parm.evalAsNode()
 
-    if render_obj is None and generate_for_rop:
+    # The ROP may not reference any geometry (e.g. no "objpath" or "soppath" parameters).
+    if generate_for_rop and (render_obj is None or
+                             render_obj.type().category() == hou.ropNodeTypeCategory()):
         # Fallback to just generating a thumbnail for the obj context.
         render_obj = hou.node("/obj")
     elif render_obj is None:
         logging.error("Error encountered when attempting to render {0}. "
                       "Invalid render object specified.".format(render_data["node_path"]))
+        return
 
     with RenderContextManager(render_obj):
         # Need a SOP node to calculate the OBJ's bbox.
@@ -377,14 +413,14 @@ def generate_thumbnail(render_data, hip_path, generate_for_rop=False):
 
 
 def frame_selected_bbox(render_obj, camera, sop_geo=None, bbox=None):
-    # Calculates w/r/t SOP context.
+    # Calculates w/r/t SOP context, then moves the bbox into world space so the
+    # object's rotation and scale are accounted for. Manager bboxes are already in world space.
     if bbox is None:
         bbox = sop_geo.boundingBox()
-
-    try:
-        obj_origin = render_obj.origin()
-    except AttributeError:
-        obj_origin = hou.Vector3(0, 0, 0)
+        try:
+            bbox *= render_obj.worldTransform()
+        except AttributeError:
+            pass
 
     # Scale up our bbox for a bit of padding.
     scale_factor = 1.50
@@ -401,7 +437,7 @@ def frame_selected_bbox(render_obj, camera, sop_geo=None, bbox=None):
     enlarged_bbox = hou.BoundingBox(new_min[0], new_min[1], new_min[2], new_max[0], new_max[1], new_max[2])
     bbox = enlarged_bbox
 
-    bbox_center = bbox.center() + obj_origin
+    bbox_center = bbox.center()
 
     adjust_height = hou.Vector3(bbox_center.x(), bbox_center.y(),
                                 bbox_center.z() + 115.0)

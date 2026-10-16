@@ -101,8 +101,10 @@ def add_unique_filename(redis_conn, user_uuid, original_filename, file_uuid, hip
     """
     file_hash = get_file_hash(hip_file)
 
-    if not redis_conn.sismember("global:file_hashes", file_hash):
-        upload_time = datetime.datetime.utcnow()
+    # Only treat the upload as a duplicate if this user has already uploaded it.
+    # Another user uploading the same file should still receive their own copy.
+    if not redis_conn.hexists(f"user:{user_uuid}:hash_to_uuid", file_hash):
+        upload_time = _utc_now()
 
         # Store the hash for set membership checks.
         redis_conn.sadd("global:file_hashes", file_hash)
@@ -129,7 +131,8 @@ def add_unique_filename(redis_conn, user_uuid, original_filename, file_uuid, hip
 @with_redis_conn
 def retrieve_uuid_from_filename(redis_conn, user_uuid, file_hash):
     byte_file_hash = redis_conn.hget(f"user:{user_uuid}:hash_to_uuid", file_hash)
-    return byte_file_hash.decode("utf-8")
+    if byte_file_hash is not None:
+        return byte_file_hash.decode("utf-8")
 
 @with_redis_conn
 def retrieve_hip_uuid_from_filename(redis_conn, filename):
@@ -152,7 +155,7 @@ def store_render_data(redis_conn, render_type, hip_file_uuid, filename, node_pat
 
     # Store latest render time for GLB file exports.
     if render_type == cnst.BackgroundRenderType.glb_file:
-        render_time = datetime.datetime.utcnow()
+        render_time = _utc_now()
         redis_conn.hset(f"file_render_data:{hip_file_uuid}:render_time", node_path, render_time.isoformat())
         redis_conn.hset(f"file_render_data:{hip_file_uuid}:frame_range", node_path, frame_range)
 
@@ -188,6 +191,14 @@ def get_user_uploaded_file_dicts(redis_conn, user_uuid):
                     file_dict[key] = decode_redis_hash(data)
 
     return file_info_list
+
+
+def _utc_now():
+    """Naive UTC time, the frontend appends the 'Z' suffix itself.
+
+    Avoids `datetime.utcnow()`, which is deprecated as of Python 3.12.
+    """
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
 
 def decode_redis_hash(redis_hash):

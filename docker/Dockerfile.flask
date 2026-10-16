@@ -9,8 +9,10 @@ COPY . .
 RUN pip install --no-cache-dir -r requirements_app.txt
 
 # Run Flask App, binding to a Unix socket that will be used to communicate with nginx.
+# Loading a large .hip file blocks the eventlet worker, so allow more than the default 30s.
 CMD ["/bin/bash", "-c", "source /root/setup_hserver.sh && \
 gunicorn --bind unix:/run/flask-socket/flask_app.sock server:app --log-level info \
+    --timeout 300 \
     --capture-output \
     --access-logfile - \
     --enable-stdio-inheritance \

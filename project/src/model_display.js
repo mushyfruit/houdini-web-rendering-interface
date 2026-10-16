@@ -48,8 +48,14 @@ class SceneManager {
 		const webGPUSupported = await BABYLON.WebGPUEngine.IsSupportedAsync;
 		if (webGPUSupported) {
 			const engine = new BABYLON.WebGPUEngine(this.canvas);
-			await engine.initAsync();
-			return engine;
+			try {
+				await engine.initAsync();
+				return engine;
+			} catch (error) {
+				// e.g. WebGPU shader tooling failed to download from the Babylon CDN.
+				console.error('WebGPU initialization failed, falling back to WebGL:', error);
+				engine.dispose();
+			}
 		}
 		// WebGL2 by default.
 		return new BABYLON.Engine(this.canvas, true);
@@ -389,6 +395,9 @@ function applyPreLoadSettings() {
 	if (globalSettings.guiParams.displayBindings.autorotate) {
 		toggleAutoRotate();
 	}
+
+	adjustExposure(globalSettings.guiParams.lightingBindings.environment_exposure);
+	updateBackgroundColor(globalSettings.guiParams.displayBindings.background_color);
 }
 
 function applyPostLoadSkyboxSettings() {
@@ -565,8 +574,6 @@ function generateSettingsPanel() {
 		.on('change', (ev) => {
 			if (!ev.last) return;
 			setSceneCamera(ev.value);
-			globalSettings.guiParams.lightingBindings.environment = ev.value;
-			globalSettings.saveParams();
 		});
 
 	const animationFolder = sceneManager.pane.addFolder({
@@ -934,6 +941,10 @@ function updateGridSize(value) {
 
 function toggleAutoRotate() {
 	const camera = sceneManager.scene.activeCamera;
+	// Auto rotation is only supported by the ArcRotateCamera, not imported .glb cameras.
+	if (!(camera instanceof BABYLON.ArcRotateCamera)) {
+		return;
+	}
 	camera.useAutoRotationBehavior = !camera.useAutoRotationBehavior;
 	if (camera.useAutoRotationBehavior) {
 		camera.autoRotationBehavior.idleRotationSpeed =
@@ -1058,16 +1069,35 @@ function generateShareableLink(fileName, placeholder) {
 }
 
 // Handle loading and clearing models.
+let latestLoadId = 0;
 export function loadModel(fileName, frameRange, root_url = DEFAULT_MODEL_ROUTE) {
 	sceneManager.handleUnfreeze(true);
 
 	clearModels();
+	const loadId = ++latestLoadId;
 	BABYLON.SceneLoader.ImportMeshAsync(null, root_url, fileName, sceneManager.scene)
 		.then((result) => {
+			// Another model was requested while this one was loading, discard it.
+			if (loadId !== latestLoadId) {
+				result.animationGroups.forEach((group) => group.dispose());
+				result.skeletons.forEach((skeleton) => skeleton.dispose());
+				result.meshes.forEach((mesh) => {
+					if (!mesh.isDisposed()) {
+						mesh.dispose(false, true);
+					}
+				});
+				return;
+			}
+
 			console.log('GLB Loaded Successfully!');
 
 			// Retrieve the nano id shareable string.
-			generateShareableLink(fileName, fileName === 'placeholder.glb');
+			// Models loaded from a shared link can reuse that same link.
+			if (root_url === '/get_glb_from_nano/') {
+				globalSettings.guiParams.shareBindings.share = window.location.href;
+			} else {
+				generateShareableLink(fileName, fileName === 'placeholder.glb');
+			}
 
 			// If we're loading from a non-standard location, ensure we update the state.
 			// This will ensure future visits to the display models page maintain the state.
@@ -1113,14 +1143,6 @@ export function loadModel(fileName, frameRange, root_url = DEFAULT_MODEL_ROUTE) 
 				if (mesh.material && mesh.material instanceof BABYLON.PBRMaterial) {
 					mesh.material.microSurface = 0.3;
 				}
-
-				// TODO Open panel to show current node's params? Fire off another render?
-				mesh.actionManager = new BABYLON.ActionManager(sceneManager.scene);
-				mesh.actionManager.registerAction(
-					new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickTrigger, () =>
-						console.debug('Clicked the model...'),
-					),
-				);
 			});
 
 			toggleWireframe(globalSettings.guiParams.displayBindings.wireframe);
@@ -1153,10 +1175,19 @@ function updateLatestRender(fileName) {
 }
 
 function clearModels() {
-	// Dispose of any meshes previously loaded.
-	sceneManager.scene.meshes.forEach((mesh) => {
-		if (mesh.metadata && mesh.metadata.imported) {
-			mesh.dispose();
+	// Imported cameras are disposed with their model, so first restore
+	// the default camera and its controls.
+	if (sceneManager.scene.activeCamera !== sceneManager.camera) {
+		setSceneCamera(DEFAULT_CAMERA_OPTION.value);
+	}
+
+	// Dispose of any meshes previously loaded along with their materials and animations.
+	// Iterate over copies as disposing modifies the scene's arrays.
+	sceneManager.scene.animationGroups.slice().forEach((group) => group.dispose());
+	sceneManager.scene.skeletons.slice().forEach((skeleton) => skeleton.dispose());
+	sceneManager.scene.meshes.slice().forEach((mesh) => {
+		if (mesh.metadata && mesh.metadata.imported && !mesh.isDisposed()) {
+			mesh.dispose(false, true);
 		}
 	});
 }
