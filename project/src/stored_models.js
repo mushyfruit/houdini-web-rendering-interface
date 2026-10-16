@@ -191,17 +191,20 @@ function populateFiles(files) {
 
 			const frameRangeInfo = document.createElement('p');
 			if (file.frame_range && file.frame_range[key]) {
-				let frameRangeParts = file.frame_range[key].split('-');
+				// Formatted as "start-end", where either frame may be negative.
+				const frameRangeString = file.frame_range[key];
+				const frameRangeParts = frameRangeString.match(/^(-?[\d.]+)-(-?[\d.]+)$/);
 
+				const label = document.createElement('b');
 				let frameRangeDisplay;
-				if (frameRangeParts.length == 2) {
-					frameRangeDisplay = `<b>Frame Range:</b> ${frameRangeParts[0]} to ${frameRangeParts[1]}`;
-				} else if (frameRangeParts.length == 1) {
-					frameRangeDisplay = `<b>Frame:</b> ${frameRangeParts[0]}`;
+				if (frameRangeParts) {
+					label.textContent = 'Frame Range:';
+					frameRangeDisplay = ` ${frameRangeParts[1]} to ${frameRangeParts[2]}`;
 				} else {
-					frameRangeDisplay = `<b>Unknown Frame Data:</b> ${frameRangeString}`;
+					label.textContent = 'Frame:';
+					frameRangeDisplay = ` ${frameRangeString}`;
 				}
-				frameRangeInfo.innerHTML = frameRangeDisplay;
+				frameRangeInfo.replaceChildren(label, frameRangeDisplay);
 			} else {
 				frameRangeInfo.innerHTML = '';
 			}
@@ -243,6 +246,7 @@ export function createThumbnail(thumb_name, nodePath, filePath, glbPath) {
 	const img = document.createElement('img');
 	img.src = thumbUrl;
 	img.className = 'model-img';
+	img.alt = `${filePath || 'Unnamed File'}: ${nodePath}`;
 	img.setAttribute('data-node-path', nodePath);
 	img.setAttribute('data-file-path', filePath || 'Unnamed File');
 	img.setAttribute('data-glb-path', glbPath);
@@ -254,6 +258,14 @@ export function createThumbnail(thumb_name, nodePath, filePath, glbPath) {
 		if (glbPath) {
 			handleDisplayModel(glbPath);
 			nodeGraphManager.updateLatestRender(glbPath);
+
+			// Ensure "Download HIP" and "Node Graph" target the .hip that produced this model.
+			const fileContainer = this.closest('.file-container');
+			const fileUUID = fileContainer?.getAttribute('file-uuid');
+			if (fileUUID && fileUUID !== nodeGraphManager.getLatestUUID()) {
+				nodeGraphManager.setFileUUID(fileUUID);
+				nodeGraphManager.updateContext('/obj');
+			}
 		} else {
 			const nodePath = this.dataset.nodePath;
 			const filePath = this.dataset.filePath;

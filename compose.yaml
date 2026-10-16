@@ -4,10 +4,11 @@ services:
       context: .
       dockerfile: docker/Dockerfile.houdini
       args:
-        DOWNLOAD_HOUDINI: "false"
         SIDEFX_CLIENT: "${SIDEFX_CLIENT}"
         SIDEFX_SECRET: "${SIDEFX_SECRET}"
-        HFS_VER: "${HFS_VER}"
+        HFS_VER: "${HFS_VER:-22.0}"
+        # Must match the Python version of the Houdini build, see README.
+        PYTHON_VER: "${PYTHON_VER:-3.13}"
         # Defines where to install Houdini, can be overriden here.
         HOU_INSTALL_LOCATION: "hou_download"
     image: houdini-base
@@ -19,6 +20,9 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.flask
+      # Ensures `FROM houdini-base` uses the locally built image, rather than attempting a pull.
+      additional_contexts:
+        houdini-base: "service:houdini_base"
     image: flask_app_image
     container_name: flask_container
     ports:
@@ -34,15 +38,18 @@ services:
       - houdini_base
       - redis
 
+  # Not published to the host, as redis has no authentication configured.
   redis:
     image: "redis:latest"
-    ports:
-      - "6379:6379"
+    volumes:
+      - redis_data:/data
 
   celery:
     build:
         context: .
         dockerfile: docker/Dockerfile.celery
+        additional_contexts:
+          houdini-base: "service:houdini_base"
     volumes:
       - ./nginx:/var/model_storage
       - ./project:/root/hou_webserver
@@ -79,3 +86,4 @@ services:
 volumes:
   shared_hip_storage:
   flask_socket:
+  redis_data:

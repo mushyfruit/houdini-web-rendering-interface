@@ -1,4 +1,5 @@
 import os
+import secrets
 from dotenv import load_dotenv
 from app import redis_client
 
@@ -7,7 +8,11 @@ load_dotenv(os.path.join(basedir, '.env'))
 
 
 class Config(object):
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev_string'
+    # Set SECRET_KEY in the .env file to keep sessions valid across restarts.
+    SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+
+    # Match nginx's `client_max_body_size`.
+    MAX_CONTENT_LENGTH = 500 * 1024 * 1024
 
     BASE_DIR = "/var/model_storage"
     STATIC_FOLDER = os.path.join(BASE_DIR, 'static')

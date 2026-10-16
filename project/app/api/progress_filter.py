@@ -69,12 +69,15 @@ class ProgressFilter:
         os.close(self._stream_fd)
 
     def read_line(self, pipe):
-        char = ""
-        line = ""
-        while char != self._escape_char and char != "\n":
-            char = os.read(pipe, 1).decode(self._orig_stream.encoding)
+        # Decode the whole line rather than each byte, as render output can
+        # contain multi-byte characters (e.g. non-ASCII file paths).
+        line = b""
+        while not line.endswith((self._escape_char.encode(), b"\n")):
+            char = os.read(pipe, 1)
+            if not char:
+                break
             line += char
-        return line
+        return line.decode(self._orig_stream.encoding or "utf-8", errors="replace")
 
     def filter_output(self):
         while True:

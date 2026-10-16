@@ -20,6 +20,7 @@ class globalExportSettings {
 			return;
 		}
 		this.exportParams[key] = value;
+		this.saveParams();
 	}
 
 	saveParams() {
@@ -125,6 +126,15 @@ async function connectHIP() {
 	const uploadForm = document.querySelector('.uploadForm');
 	uploadForm.addEventListener('submit', async function (e) {
 		e.preventDefault();
+
+		// Avoid double submissions while an upload is in progress.
+		const uploadButton = this.querySelector('.upload-button');
+		if (uploadButton.disabled) {
+			return;
+		}
+		uploadButton.disabled = true;
+		document.querySelector('.status-message').innerText = '';
+
 		let formData = new FormData(this);
 
 		try {
@@ -142,6 +152,8 @@ async function connectHIP() {
 			await fetch_node_graph(data.uuid);
 		} catch (error) {
 			document.querySelector('.status-message').innerText = error.message;
+		} finally {
+			uploadButton.disabled = false;
 		}
 	});
 }

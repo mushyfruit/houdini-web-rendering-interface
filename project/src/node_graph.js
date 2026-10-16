@@ -346,6 +346,7 @@ export function deletePoppers() {
 		const popper = poppers[popperId];
 
 		if (popper) {
+			popper.cleanup?.();
 			popper.destroy();
 		}
 
@@ -387,6 +388,12 @@ function createPopperForNode(cy, node) {
 	const update = () => popperInstance.update();
 	node.on('position', update);
 	cy.on('pan zoom resize', update);
+
+	// Unregister these listeners when the popper is destroyed on context change.
+	popperInstance.cleanup = () => {
+		node.off('position', update);
+		cy.off('pan zoom resize', update);
+	};
 }
 
 function hidePopper(popperElement) {
@@ -462,17 +469,17 @@ function generateContextButtons(cy, full_context, parent_icons) {
 	});
 
 	// Ensure the context menu closes after any click event if it's opened.
+	// Query the menu on each click as the node graph page can be re-created.
 	if (!isContextMenuListenerAdded) {
 		document.addEventListener('mousedown', function () {
-			if (contextMenu.style.display === 'block') {
-				contextMenu.style.display = 'none';
+			const menu = document.querySelector('.other-contexts-menu');
+			if (menu && menu.style.display === 'block') {
+				menu.style.display = 'none';
 			}
-		});
-		contextMenu.addEventListener('mousedown', function (event) {
-			event.stopPropagation();
 		});
 		isContextMenuListenerAdded = true;
 	}
+	contextMenu.onmousedown = (event) => event.stopPropagation();
 
 	const buttonContainer = document.getElementById('context-display');
 	buttonContainer.appendChild(container);
@@ -500,25 +507,29 @@ function setupRootContextListener(button, contextMenu, parentIcons, container, c
 		}
 	});
 
-	button.addEventListener('mouseup', function () {
+	button.addEventListener('mouseup', function (event) {
 		clearTimeout(holdTimer);
 		const nodeName = event.target.getAttribute('nodeFullPath');
-		updateGraph(cy, nodeName).then((nodeData) => {
-			cy.elements().remove();
-			deletePoppers();
-			displayNodeContext(cy, nodeName, nodeData);
-		});
+		updateGraph(cy, nodeName)
+			.then((nodeData) => {
+				cy.elements().remove();
+				deletePoppers();
+				displayNodeContext(cy, nodeName, nodeData);
+			})
+			.catch((error) => console.error('Error processing graph update: ', error));
 	});
 }
 
 function setupChildListener(button, cy) {
 	button.addEventListener('mousedown', function (event) {
 		const nodeName = event.target.getAttribute('nodeFullPath');
-		updateGraph(cy, nodeName).then((nodeData) => {
-			cy.elements().remove();
-			deletePoppers();
-			displayNodeContext(cy, nodeName, nodeData);
-		});
+		updateGraph(cy, nodeName)
+			.then((nodeData) => {
+				cy.elements().remove();
+				deletePoppers();
+				displayNodeContext(cy, nodeName, nodeData);
+			})
+			.catch((error) => console.error('Error processing graph update: ', error));
 	});
 }
 
@@ -557,11 +568,13 @@ function createContextMenuEntry(contextMenu, parentIcons, cy, contextToCreate) {
 		const targetContext = `/${contextToCreate}`;
 		// Hide the menu before jumping contexts.
 		contextMenu.style.display = 'none';
-		updateGraph(cy, targetContext).then((nodeData) => {
-			cy.elements().remove();
-			deletePoppers();
-			displayNodeContext(cy, targetContext, nodeData);
-		});
+		updateGraph(cy, targetContext)
+			.then((nodeData) => {
+				cy.elements().remove();
+				deletePoppers();
+				displayNodeContext(cy, targetContext, nodeData);
+			})
+			.catch((error) => console.error('Error processing graph update: ', error));
 	});
 }
 
@@ -668,7 +681,7 @@ function buildPopperDiv(node) {
 		});
 	}
 
-	const frameInputs = document.querySelectorAll('.frame-input');
+	const frameInputs = div.querySelectorAll('.frame-input');
 	frameInputs.forEach((input) => {
 		input.addEventListener('input', function (e) {
 			const value = e.target.value;
@@ -694,7 +707,6 @@ function initSocket(node) {
 
 function registerEventListeners() {
 	appState.socket.on('node_render_progress_channel', handleRenderUpdate);
-	appState.socket.on('node_thumb_progress_channel', handleThumbUpdate);
 	appState.socket.on('node_thumb_finish_channel', handleThumbFinish);
 	appState.socket.on('node_render_finish_channel', handleRenderFinish);
 	appState.socket.on('render_rop_finish_channel', handleRopFinish);
@@ -709,11 +721,15 @@ function handleRenderUpdate(data) {
 	}
 }
 
-function handleThumbUpdate(data) {
-	console.debug(data);
-}
-
 function handleThumbFinish(data) {
+	// Update the Stored Models Page
+	updateStoredModelEntry(data);
+
+	// Ignore the remaining updates if the user has since switched .hip files.
+	if (data.hipFile !== nodeGraphManager.getLatestUUID()) {
+		return;
+	}
+
 	const route = data.staticRoute || DEFAULT_THUMBNAIL_ROUTE;
 	const thumbUrl = route + data.fileName;
 	nodeGraphManager.updateNodeStateCache(data.nodePath, 'thumbnail', thumbUrl);
@@ -723,9 +739,6 @@ function handleThumbFinish(data) {
 		thumbnail.src = thumbUrl;
 		thumbnail.style.display = 'block';
 	}
-
-	// Update the Stored Models Page
-	updateStoredModelEntry(data);
 }
 
 function updateStoredModelEntry(data) {
@@ -747,6 +760,11 @@ function updateStoredModelEntry(data) {
 }
 
 function handleRenderFinish(data) {
+	// Ignore renders from a previously loaded .hip file.
+	if (data.hipFile !== nodeGraphManager.getLatestUUID()) {
+		return;
+	}
+
 	nodeGraphManager.addRender(data.fileName, data.nodePath, data.frameRange);
 	nodeGraphManager.updateNodeStateCache(data.nodePath, 'has_cooked', true);
 	handlePostRender(data.nodePath);
@@ -776,8 +794,11 @@ function handleRopFinish(data) {
 }
 
 function startRenderTask(node) {
-	const startFrameInput = document.getElementById('start-frame');
-	const endFrameInput = document.getElementById('end-frame');
+	// Poppers for previously selected nodes remain in the DOM, so only
+	// query the frame inputs within this node's popper.
+	const popperDiv = document.getElementById(`${node.id()}_popper`);
+	const startFrameInput = popperDiv.querySelector('#start-frame');
+	const endFrameInput = popperDiv.querySelector('#end-frame');
 
 	const start = parseInt(startFrameInput.value, 10);
 	const end = parseInt(endFrameInput.value, 10);
@@ -832,6 +853,11 @@ function submitRenderTask(start, end, nodePath) {
 }
 
 function validateSubmission(start, end) {
+	if (!Number.isFinite(start) || !Number.isFinite(end)) {
+		console.error('Enter valid start and end frames.');
+		return false;
+	}
+
 	if (start >= end) {
 		console.error('Start frame must be less than end frame.');
 		return false;
@@ -914,5 +940,6 @@ async function updateGraph(cy, nodeName, file_uuid = globalFileUuid, store_view_
 		return await response.json();
 	} catch (error) {
 		console.error('Error fetching node data: ', error);
+		throw error;
 	}
 }

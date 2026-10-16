@@ -9,6 +9,7 @@ from nanoid import generate
 from app import redis_client
 from app.main import bp
 from app.api import hou_api
+from app.api.utils import is_valid_uuid
 from app.constants import CURRENT_FILE_UUID
 from flask import (current_app, render_template,
                    url_for, redirect, jsonify, request,
@@ -43,8 +44,13 @@ def generate_download_link():
             "error": "No filename was provided for download generation request."
         }), 400
 
+    # Clear out any expired links before storing the new one.
+    current_time = time.time()
+    for expired_id in [k for k, (_, expiry) in temporary_links.items() if current_time >= expiry]:
+        del temporary_links[expired_id]
+
     download_id = str(uuid.uuid4())
-    expiry_time = time.time() + 3600
+    expiry_time = current_time + 3600
     temporary_links[download_id] = (filename, expiry_time)
     return jsonify(download_link=f"/download/{file_ext}/{download_id}")
 
@@ -144,11 +150,17 @@ def download_rendered_sequence_zip():
     if not filename:
         return jsonify({"message": "No valid filename was provided to download."}), 400
 
+    # Render directories are always named by UUID, reject anything else (e.g. "/etc").
     file_uuid = filename.split(".")[0]
-    directory = os.path.join(current_app.config['USER_RENDER_DIR'], file_uuid)
+    if not is_valid_uuid(file_uuid):
+        return jsonify({"message": "Invalid filename was provided to download."}), 400
 
-    files = glob.glob(os.path.join(directory, '*'))
+    directory = os.path.join(current_app.config['USER_RENDER_DIR'], file_uuid)
+    if not os.path.isdir(directory):
+        return jsonify({"message": "No rendered files were found."}), 404
+
     zip_path = os.path.join(directory, "{0}.zip".format(file_uuid))
+    files = [f for f in glob.glob(os.path.join(directory, '*')) if f != zip_path]
     with zipfile.ZipFile(zip_path, 'w') as zipf:
         for file in files:
             zipf.write(file, os.path.basename(file))
@@ -184,10 +196,10 @@ def view():
 
 @bp.route("/set_existing_user_uuid", methods=["POST"])
 def set_existing_user_uuid():
-    data = request.get_json()
-    user_uuid = data.get('userUuid')
+    data = request.get_json(silent=True)
+    user_uuid = data.get('userUuid') if isinstance(data, dict) else None
 
-    if user_uuid:
+    if user_uuid and is_valid_uuid(user_uuid):
         session["user_uuid"] = user_uuid
         return jsonify({'status': 'success', 'message': 'UUID set in session'}), 200
     else:
@@ -220,30 +232,19 @@ def graph_data():
     if not file_uuid:
         return jsonify({"error": "A file UUID is required."}), 400
 
-    # Avoid calling hou.hipFile.load if we've already loaded.
-    if file_uuid == session.get(CURRENT_FILE_UUID, None):
-        node_data = hou_api.scan_and_display_nodes(parent_node, load=False)
-        return jsonify(node_data), 200
+    if not parent_node:
+        return jsonify({"error": "A node name is required."}), 400
 
-    # Locate the file on disk. Search for UUID prefix.
-    # Handles searching for .hip, .hiplc, and .hipnc files.
-    search_pattern = os.path.join(current_app.config['UPLOAD_FOLDER'],
-                                  "{0}.hip*".format(file_uuid))
+    try:
+        hip_file = hou_api.get_hip_path(file_uuid)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
-    matching_files = glob.glob(search_pattern)
-    if not matching_files:
-        if file_uuid == current_app.config["PLACEHOLDER_DIR"]:
-            # Make an exception if we're attempting to load placeholder.hip
-            matching_files = [current_app.config["PLACEHOLDER_HIP_PATH"]]
-        else:
-            return jsonify({"error": "No matching files with provided UUID."}), 400
-
-    if len(matching_files) > 1:
-        # Potentially indicates need for cleanup or strange collision issue.
-        return jsonify({"error": "Multiple files found."}), 500
-
-    hip_file = matching_files[0]
+    # The Houdini session is shared between all users, so this only
+    # loads the .hip file if it isn't the one that's currently loaded.
     node_data = hou_api.scan_and_display_nodes(parent_node, hip_file=hip_file)
+    if node_data is None:
+        return jsonify({"error": "No node found at: {0}".format(parent_node)}), 404
 
     # Store the current file UUID for later use when storing render data in redis.
     session[CURRENT_FILE_UUID] = file_uuid
@@ -282,7 +283,13 @@ def handle_upload():
         sanitized_filename = secure_filename(hip_file.filename)
         _, ext = os.path.splitext(sanitized_filename)
         file_uuid = str(uuid.uuid4())
-        filename = "{0}{1}".format(file_uuid, ext)
+
+        # Saved files are later located via a lowercase "<uuid>.hip*" search.
+        filename = "{0}{1}".format(file_uuid, ext.lower())
+
+        # The user UUID is normally set on page load, but the upload may beat that request.
+        if "user_uuid" not in session:
+            session["user_uuid"] = str(uuid.uuid4())
 
         if 'uploaded_files' not in session:
             session['uploaded_files'] = []

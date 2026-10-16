@@ -38,17 +38,29 @@ Ensure you have the following installed on your system first:
     ```env
     SIDEFX_CLIENT="YOUR_CLIENT_ID_HERE"
     SIDEFX_SECRET="YOUR_SECRET_HERE"
-    HFS_VER="20.0"
+    HFS_VER="22.0"
+    PYTHON_VER="3.13"
+    SECRET_KEY="ANY_LONG_RANDOM_STRING"
     ```
    - If you're targeting a specific Houdini version, specify that with the `HFS_VER` variable.
+   - The web app imports Houdini's `hou` module directly, so `PYTHON_VER` must match the Python version of
+     that Houdini build:
+
+     | `HFS_VER`      | `PYTHON_VER` |
+     |----------------|--------------|
+     | `22.0`         | `3.13`       |
+     | `20.5`, `21.0` | `3.11`       |
+     | `20.0`         | `3.10`       |
+
+   - `SECRET_KEY` signs the user sessions. If it's omitted, a random key is generated on each restart.
 3. **(Optional) Add GPU Support**:
    - To enable GPU support for the dockerized Houdini, you need to install the NVIDIA Container Toolkit. 
    - [Nvidia GPU Support](#nvidia-gpu-support) (Only supported on Linux)
 
 
 4. **Build and Run the Application**:
-    - Once you've download Docker and setup your account, run `docker compose up --build` to build the app's docker
-      images.
+    - Once you've installed Docker (with Docker Compose v2.17 or newer), run `docker compose up --build` to build
+      the app's docker images.
     - If you encounter the following issue when building: `Error getting credentials`, you may need to
       run `docker login`.
 5. **Access the Houdini Web Server**:
@@ -62,9 +74,11 @@ Ensure you have the following installed on your system first:
 - Install the NVIDIA Container Toolkit using the following [instructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 - Verify the installation:
   ```shell
-  docker run --rm --gpus all nvidia/cuda:11.0.3-base nvidia-smi
+  docker run --rm --gpus all ubuntu nvidia-smi
   ```
   You should see a printout of your GPU information.
+- Give the Celery render workers access to the GPU by uncommenting the `deploy` section of the `celery` service
+  in `compose.yaml`.
 
 
 ## Troubleshooting
@@ -74,24 +88,28 @@ Ensure you have the following installed on your system first:
       to [install Docker Compose](https://docs.docker.com/compose/install/) manually.
 - **Network Access**: Verify that your device is connected to the same local network.
 - **Container Logs**: Check the container logs for any error messages by running: `docker compose logs`
-- **OpenCL Issues**: If you do not intend to use OpenCL in the container, remove lines 57-63 in `compose.yaml`.
+- **OpenCL Issues**: If you do not intend to use OpenCL in the container, leave the `deploy` section of the `celery`
+  service in `compose.yaml` commented out.
+- **`import hou` Errors**: Ensure `PYTHON_VER` matches the Python version of your Houdini build (see above).
 
 ## Downloading Houdini Separately
 
-As part of the building the Houdini docker image, the latest Python3.9 build of Houdini will
-automatically be installed. However, if you'd like to accelerate the build process. you can download Houdini beforehand
-and point the Docker file to your install (located within the project root.)
+As part of building the Houdini docker image, the latest production build of Houdini will be downloaded and
+installed automatically. However, if you'd like to accelerate the build process, you can download Houdini beforehand
+and point the Dockerfile to your download (located within the project root).
 
 1. Run the `hou_install.py` script:
-    - From the project root run:
-        - `python3 ./scripts/hou_install.py 20.0`
-    - This will install and unpack Houdini to a folder titled `hou_download`.
-    - The script automatically targets the Python3.9 build of the specified Houdini verison.
+    - From the project root, install the script's dependencies and run it:
+        - `python3 -m pip install -r requirements_hou.txt`
+        - `python3 ./scripts/hou_install.py 22.0`
+    - This will download Houdini to a folder titled `hou_download`. For Houdini 20.x and 21.x the download is
+      unpacked, while for Houdini 22+ the download is kept alongside the Houdini Installer used to install it.
+    - The script downloads the default build of the specified Houdini version. Use `-p` to pick a different product.
 2. (Optional) Update the `HOU_INSTALL_LOCATION` argument:
     - Update the `HOU_INSTALL_LOCATION` argument in `compose.yaml` to point to your Houdini download.
     - By default, it points to `hou_download` and shouldn't require changes.
 3. Start the Docker Build process:
-    - When you start the Docker build process, the unpacked Houdini install will be copied over.
+    - When you start the Docker build process, the downloaded Houdini build will be copied over.
 
 ## Contributing
 
