@@ -38,7 +38,7 @@ COPY --from=houdini-downloader /houdini /houdiniInstaller
 ARG EULA_DATE="2021-10-13"
 RUN /houdiniInstaller/build/houdini.install --auto-install --install-sidefxlabs --no-install-license \
         --no-install-avahi --no-install-menus --accept-EULA ${EULA_DATE} --make-dir /opt/houdini/build && \
-    rm -r /houdiniInstaller
+    rm -r /houdiniInstaller /opt/houdini/build/houdini/help /opt/houdini/build/toolkit
 
 # THIRD STAGE: Copy houdini-install image and un-cache unnecessary installation files
 FROM python:${PYTHON_VER}-slim-trixie
