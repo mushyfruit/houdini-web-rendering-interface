@@ -1,96 +1,76 @@
-# The Flask and Celery apps import `hou` directly, so this must match the Python version
-# of the downloaded Houdini build. e.g. Houdini 22.0 -> 3.13, Houdini 20.5/21.0 -> 3.11
+# Must match the Houdini build's Python, e.g. Houdini 22.0 -> 3.13, Houdini 20.5/21.0 -> 3.11
 ARG PYTHON_VER=3.13
 
 # FIRST STAGE: Download Houdini
 FROM python:${PYTHON_VER}-slim-trixie AS houdini-downloader
-ARG HOU_INSTALL_LOCATION
 ARG SIDEFX_SECRET
 ARG SIDEFX_CLIENT
 ARG HFS_VER
 
+# Only copy what the download needs, so other changes don't invalidate the cached download.
+# `hou_downloa[d]` matches the optional pre-downloaded build, see README.
 WORKDIR /code
-COPY . ./houdini_install
+COPY requirements_hou.txt scripts/hou_install.py scripts/sidefx.py hou_downloa[d] ./
 
 # DOCKER_DL used within the `hou_install.py` script.
-ENV PYTHONPATH=/code DOCKER_DL=true
+ENV DOCKER_DL=true
 
 # If user has downloaded Houdini already then copy it over, otherwise download directly into container.
 RUN mkdir /houdini && \
-    if [ ! -d "./houdini_install/${HOU_INSTALL_LOCATION}/build" ]; then \
-        echo "Downloading houdini..." && \
-        pip install --upgrade --no-cache-dir -r houdini_install/requirements_hou.txt && \
-        python3 houdini_install/scripts/hou_install.py $HFS_VER; \
-    else \
+    if [ -d build ]; then \
         echo "Houdini build folder exists. Skipping download." && \
-        cp -r "./houdini_install/${HOU_INSTALL_LOCATION}/build" /houdini/build; \
+        mv build /houdini/build; \
+    else \
+        echo "Downloading houdini..." && \
+        pip install --no-cache-dir -r requirements_hou.txt && \
+        python3 hou_install.py $HFS_VER; \
     fi
 
 # SECOND STAGE: Install and initialize Houdini
 FROM python:${PYTHON_VER}-slim-trixie AS houdini-install
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends iputils-ping \
-        netcat-traditional ftp telnet procps hostname libgl1 libatomic1 && \
-    apt-get clean && \
+    apt-get install -y --no-install-recommends procps hostname libgl1 libatomic1 && \
     rm -rf /var/lib/apt/lists/*
 
-# Bring over the Houdini download from the previous stage.
 COPY --from=houdini-downloader /houdini /houdiniInstaller
-COPY --from=houdini-downloader /code/houdini_install/requirements_app.txt .
 
-RUN python3 -m pip install --upgrade --no-cache-dir -r requirements_app.txt
-
-# Houdini 22 removed the `houdini.install` script in favor of the Houdini Installer,
-# whose `legacy_install` command accepts the same options and installs from the tarball.
 ARG EULA_DATE="2021-10-13"
-RUN if [ -f /houdiniInstaller/build/houdini.install ]; then \
-        /houdiniInstaller/build/houdini.install --auto-install --install-sidefxlabs \
-            --accept-EULA ${EULA_DATE} --make-dir /opt/houdini/build; \
-    else \
-        bash /houdiniInstaller/build/install_houdini_launcher.sh --no-desktop-menus /opt/sidefx/launcher && \
-        mkdir -p /opt/houdini && \
-        /opt/sidefx/launcher/bin/houdini_installer legacy_install \
-            --offline-installer /houdiniInstaller/build/houdini.tar.gz \
-            --accept-EULA ${EULA_DATE} --install-sidefxlabs --no-install-license /opt/houdini/build; \
-    fi
-RUN rm -r /houdiniInstaller
+RUN /houdiniInstaller/build/houdini.install --auto-install --install-sidefxlabs --accept-EULA ${EULA_DATE} --make-dir /opt/houdini/build && \
+    rm -r /houdiniInstaller
 
 # THIRD STAGE: Copy houdini-install image and un-cache unnecessary installation files
 FROM python:${PYTHON_VER}-slim-trixie
 ARG PYTHON_VER
 COPY --from=houdini-install / /
 
-COPY scripts/setup_hserver.sh /root/
-RUN mkdir -p /usr/lib/sesi && \
-    touch /usr/lib/sesi/licenses && \
-    chmod +x /root/setup_hserver.sh
-
-# Fail early if the Houdini build's Python doesn't match the image's Python.
 RUN test -d /opt/houdini/build/houdini/python${PYTHON_VER}libs || \
     { echo "Houdini build does not contain python${PYTHON_VER}libs, set PYTHON_VER to match:"; \
       ls -d /opt/houdini/build/houdini/python*libs; exit 1; }
 
-# The SideFX API credentials are passed at runtime via the `.env` file, rather than
-# stored in the image where they'd be visible via `docker image inspect`.
-ARG HFS_VER
-ENV HFS_TARGET=$HFS_VER \
-    PATH="${PATH}:/opt/houdini/build/houdini/sbin:/opt/houdini/build/bin" \
-    PYTHONPATH="${PYTHONPATH}:/opt/houdini/build/houdini/python${PYTHON_VER}libs:/usr/local/lib/python${PYTHON_VER}/site-packages:/usr/local/lib64/python${PYTHON_VER}/site-packages"
-
 # Install the required libs for OpenCL, then point OpenCL to the correct implementation.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ocl-icd-libopencl1 opencl-headers clinfo && \
+    apt-get install -y --no-install-recommends ocl-icd-libopencl1 && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p /etc/OpenCL/vendors && \
     echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
 
+COPY requirements_app.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements_app.txt && rm /tmp/requirements_app.txt
+
+ARG HFS_VER
+ENV HFS_TARGET=$HFS_VER \
+    PATH="${PATH}:/opt/houdini/build/houdini/sbin:/opt/houdini/build/bin" \
+    PYTHONPATH="/opt/houdini/build/houdini/python${PYTHON_VER}libs"
+
 # Expose all available GPU devices to the docker container.
-ENV NVIDIA_VISIBLE_DEVICES all
-ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
+ENV NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 # Stop Houdini from conflicting with our drivers!
-ENV HOUDINI_USE_HFS_OCL 0
-ENV HOUDINI_OCL_DEVICETYPE GPU
+ENV HOUDINI_USE_HFS_OCL=0 \
+    HOUDINI_OCL_DEVICETYPE=GPU
+
+COPY scripts/setup_hserver.sh /root/
 
 WORKDIR /root/hou_webserver

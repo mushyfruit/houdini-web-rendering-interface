@@ -259,7 +259,6 @@ export function createThumbnail(thumb_name, nodePath, filePath, glbPath) {
 			handleDisplayModel(glbPath);
 			nodeGraphManager.updateLatestRender(glbPath);
 
-			// Ensure "Download HIP" and "Node Graph" target the .hip that produced this model.
 			const fileContainer = this.closest('.file-container');
 			const fileUUID = fileContainer?.getAttribute('file-uuid');
 			if (fileUUID && fileUUID !== nodeGraphManager.getLatestUUID()) {

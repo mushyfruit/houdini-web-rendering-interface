@@ -9,12 +9,8 @@ services:
         HFS_VER: "${HFS_VER:-22.0}"
         # Must match the Python version of the Houdini build, see README.
         PYTHON_VER: "${PYTHON_VER:-3.13}"
-        # Defines where to install Houdini, can be overriden here.
-        HOU_INSTALL_LOCATION: "hou_download"
     image: houdini-base
     container_name: houdini_base
-    env_file:
-      - .env
 
   hou_flask_app:
     build:
@@ -25,11 +21,9 @@ services:
         houdini-base: "service:houdini_base"
     image: flask_app_image
     container_name: flask_container
-    ports:
-      - "8000:8000"
     volumes:
-      - ./nginx:/var/model_storage
-      - ./project:/root/hou_webserver
+      - ./nginx:/var/model_storage:z
+      - ./project:/root/hou_webserver:z
       - shared_hip_storage:/root/hip_storage
       - flask_socket:/run/flask-socket
     env_file:
@@ -38,7 +32,6 @@ services:
       - houdini_base
       - redis
 
-  # Not published to the host, as redis has no authentication configured.
   redis:
     image: "redis:latest"
     volumes:
@@ -51,8 +44,8 @@ services:
         additional_contexts:
           houdini-base: "service:houdini_base"
     volumes:
-      - ./nginx:/var/model_storage
-      - ./project:/root/hou_webserver
+      - ./nginx:/var/model_storage:z
+      - ./project:/root/hou_webserver:z
       - shared_hip_storage:/root/hip_storage
     env_file:
       - .env
@@ -77,7 +70,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx:/var/www
+      - ./nginx:/var/www:z
       - shared_hip_storage:/var/hip_storage
       - flask_socket:/run/flask-socket
     depends_on:

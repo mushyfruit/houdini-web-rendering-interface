@@ -41,7 +41,6 @@ def get_hip_path(file_uuid):
         # Make an exception if we're attempting to load placeholder.hip
         return current_app.config["PLACEHOLDER_HIP_PATH"]
 
-    # Uploaded files are always saved as "<uuid>.<ext>".
     if not utils.is_valid_uuid(file_uuid):
         raise ValueError("Invalid file UUID provided.")
 
@@ -162,7 +161,6 @@ def locate_and_store_icon(contents,
                           parent=False):
     global _icon_mapping
 
-    # Custom icons (e.g. an HDA's icon given as a file path) aren't stored in icons.zip.
     if not node_icon or "_" not in node_icon:
         return
 
@@ -206,7 +204,6 @@ def submit_node_for_render(render_struct, hip_path):
             target=socket_update.listen_to_celery_workers)
         _redis_thread.start()
 
-    # Another user may have loaded a different .hip file in the meantime.
     ensure_hip_loaded(hip_path)
 
     # Celery automatically serializes arguments via JSON.

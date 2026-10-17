@@ -69,8 +69,6 @@ class ProgressFilter:
         os.close(self._stream_fd)
 
     def read_line(self, pipe):
-        # Decode the whole line rather than each byte, as render output can
-        # contain multi-byte characters (e.g. non-ASCII file paths).
         line = b""
         while not line.endswith((self._escape_char.encode(), b"\n")):
             char = os.read(pipe, 1)

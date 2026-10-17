@@ -3,6 +3,7 @@ import shutil
 import hashlib
 import logging
 import tarfile
+import platform
 import argparse
 import requests
 
@@ -15,12 +16,6 @@ logging.basicConfig(level=logging.INFO)
 
 DEFAULT_DL_FOLDER = "hou_download"
 MIN_HOUDINI = 20.0
-
-# Houdini 22 removed the self-extracting `houdini.install` script. Installing now requires
-# the Houdini Installer (`houdini_installer`), which installs from the downloaded .tar.gz.
-INSTALLER_HOUDINI = 22.0
-INSTALLER_SCRIPT = "install_houdini_launcher.sh"
-HOUDINI_TARBALL = "houdini.tar.gz"
 
 
 def valid_version(version):
@@ -68,7 +63,6 @@ def parse_args():
 
 
 def fetch_or_resume(response, dl_location):
-    # Only append if the server honored the Range header, otherwise start over.
     mode = 'ab' if response.status_code == 206 else 'wb'
     with open(dl_location, mode) as f:
         response.raw.decode_content = True
@@ -84,7 +78,7 @@ def fetch_or_resume(response, dl_location):
     progress_bar.close()
 
 
-def download_houdini(service, args, product):
+def download_houdini(service, args):
     """Retrieve the latest build and download.
 
     latest_release = {
@@ -94,11 +88,24 @@ def download_houdini(service, args, product):
     }
 
     """
-    hou_response = service.download.get_daily_build_download(
-        product=product,
+    # `platform='linux'` matches both the x86_64 and arm64 builds, so pick the host's explicitly.
+    arch = {'aarch64': 'arm64'}.get(platform.machine(), platform.machine())
+    builds = service.download.get_daily_builds_list(
+        product=args.product or 'houdini',
         version=str(args.version),
-        build='production',
-        platform='linux'
+        platform='linux',
+        only_production=True
+    )
+    builds = [b for b in builds if b['platform'].startswith(f'linux_{arch}')]
+    if not builds:
+        logging.error(f"No production Houdini {args.version} build found for linux_{arch}")
+        return
+
+    hou_response = service.download.get_daily_build_download(
+        product=args.product or 'houdini',
+        version=str(args.version),
+        build=builds[0]['build'],
+        platform=builds[0]['platform']
     )
     if not isinstance(hou_response, dict):
         logging.error(hou_response)
@@ -164,20 +171,6 @@ def extract_houdini_tar(download_location, args):
     logging.info(f"Extracted houdini tar file from `{extract_path}` to `{new_path}`")
 
 
-def stage_installer_files(download_location, installer_location):
-    """Move the Houdini tarball and the Houdini Installer script into `build`.
-
-    Used for Houdini 22+, where the tarball is installed via `houdini_installer`
-    rather than extracted and run with `houdini.install`.
-    """
-    new_path = os.path.join(os.path.dirname(download_location), "build")
-    ensure_empty_dir(new_path)
-
-    os.rename(download_location, os.path.join(new_path, HOUDINI_TARBALL))
-    os.rename(installer_location, os.path.join(new_path, INSTALLER_SCRIPT))
-    logging.info(f"Staged the Houdini tarball and installer in `{new_path}`")
-
-
 def ensure_empty_dir(directory):
     if os.path.exists(directory):
         shutil.rmtree(directory)
@@ -210,7 +203,7 @@ if __name__ == '__main__':
     if not os.environ.get("DOCKER_DL") and args.clear_downloads and os.path.exists(download_folder):
         shutil.rmtree(download_folder)
 
-    download_response = download_houdini(service, args, args.product or 'houdini')
+    download_response = download_houdini(service, args)
     if not download_response:
         logging.error("Errors were encountered when attempting "
                       "to download Houdini.")
@@ -218,16 +211,4 @@ if __name__ == '__main__':
 
     download_location, hou_response = download_response
     verify_checksum(download_location, hou_response["hash"])
-
-    if args.version < INSTALLER_HOUDINI:
-        extract_houdini_tar(download_location, args)
-    else:
-        installer_response = download_houdini(service, args, 'houdini-launcher')
-        if not installer_response:
-            logging.error("Errors were encountered when attempting "
-                          "to download the Houdini Installer.")
-            raise SystemExit(1)
-
-        installer_location, launcher_response = installer_response
-        verify_checksum(installer_location, launcher_response["hash"])
-        stage_installer_files(download_location, installer_location)
+    extract_houdini_tar(download_location, args)

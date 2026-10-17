@@ -2,12 +2,6 @@ FROM houdini-base
 
 # Probably should set this up not to run as root for security concerns.
 # However, leaving this as root for now to avoid setting up depedencies for a celery user.
-COPY /scripts/setup_hserver.sh /root/
-RUN chmod +x /root/setup_hserver.sh
-
-COPY . .
-
-RUN pip install --no-cache-dir -r requirements_app.txt
 
 # In `project.app.__init__.py` ensure we spawn the worker processes, rather than preforking!
 # Preforking behavior will raise the following: OpenCL Exception: clGetPlatformInfo (-33).

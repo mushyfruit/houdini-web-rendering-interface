@@ -52,7 +52,6 @@ class SceneManager {
 				await engine.initAsync();
 				return engine;
 			} catch (error) {
-				// e.g. WebGPU shader tooling failed to download from the Babylon CDN.
 				console.error('WebGPU initialization failed, falling back to WebGL:', error);
 				engine.dispose();
 			}
@@ -941,7 +940,6 @@ function updateGridSize(value) {
 
 function toggleAutoRotate() {
 	const camera = sceneManager.scene.activeCamera;
-	// Auto rotation is only supported by the ArcRotateCamera, not imported .glb cameras.
 	if (!(camera instanceof BABYLON.ArcRotateCamera)) {
 		return;
 	}
@@ -1077,7 +1075,6 @@ export function loadModel(fileName, frameRange, root_url = DEFAULT_MODEL_ROUTE) 
 	const loadId = ++latestLoadId;
 	BABYLON.SceneLoader.ImportMeshAsync(null, root_url, fileName, sceneManager.scene)
 		.then((result) => {
-			// Another model was requested while this one was loading, discard it.
 			if (loadId !== latestLoadId) {
 				result.animationGroups.forEach((group) => group.dispose());
 				result.skeletons.forEach((skeleton) => skeleton.dispose());
@@ -1092,7 +1089,6 @@ export function loadModel(fileName, frameRange, root_url = DEFAULT_MODEL_ROUTE) 
 			console.log('GLB Loaded Successfully!');
 
 			// Retrieve the nano id shareable string.
-			// Models loaded from a shared link can reuse that same link.
 			if (root_url === '/get_glb_from_nano/') {
 				globalSettings.guiParams.shareBindings.share = window.location.href;
 			} else {
@@ -1175,13 +1171,10 @@ function updateLatestRender(fileName) {
 }
 
 function clearModels() {
-	// Imported cameras are disposed with their model, so first restore
-	// the default camera and its controls.
 	if (sceneManager.scene.activeCamera !== sceneManager.camera) {
 		setSceneCamera(DEFAULT_CAMERA_OPTION.value);
 	}
 
-	// Dispose of any meshes previously loaded along with their materials and animations.
 	// Iterate over copies as disposing modifies the scene's arrays.
 	sceneManager.scene.animationGroups.slice().forEach((group) => group.dispose());
 	sceneManager.scene.skeletons.slice().forEach((skeleton) => skeleton.dispose());

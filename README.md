@@ -102,13 +102,9 @@ and point the Dockerfile to your download (located within the project root).
     - From the project root, install the script's dependencies and run it:
         - `python3 -m pip install -r requirements_hou.txt`
         - `python3 ./scripts/hou_install.py 22.0`
-    - This will download Houdini to a folder titled `hou_download`. For Houdini 20.x and 21.x the download is
-      unpacked, while for Houdini 22+ the download is kept alongside the Houdini Installer used to install it.
+    - This will download and unpack Houdini to a folder titled `hou_download`.
     - The script downloads the default build of the specified Houdini version. Use `-p` to pick a different product.
-2. (Optional) Update the `HOU_INSTALL_LOCATION` argument:
-    - Update the `HOU_INSTALL_LOCATION` argument in `compose.yaml` to point to your Houdini download.
-    - By default, it points to `hou_download` and shouldn't require changes.
-3. Start the Docker Build process:
+2. Start the Docker Build process:
     - When you start the Docker build process, the downloaded Houdini build will be copied over.
 
 ## Contributing

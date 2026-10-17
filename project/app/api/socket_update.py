@@ -84,7 +84,6 @@ def listen_to_celery_workers():
         cnst.PublishChannels.thumb_progress: handle_thumb_progress_update,
     }
 
-    # Keep listening if redis restarts, otherwise all future render updates are lost.
     while True:
         try:
             _redis_client = redis_client.get_client_instance()

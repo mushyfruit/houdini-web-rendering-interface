@@ -389,7 +389,6 @@ function createPopperForNode(cy, node) {
 	node.on('position', update);
 	cy.on('pan zoom resize', update);
 
-	// Unregister these listeners when the popper is destroyed on context change.
 	popperInstance.cleanup = () => {
 		node.off('position', update);
 		cy.off('pan zoom resize', update);
@@ -469,7 +468,6 @@ function generateContextButtons(cy, full_context, parent_icons) {
 	});
 
 	// Ensure the context menu closes after any click event if it's opened.
-	// Query the menu on each click as the node graph page can be re-created.
 	if (!isContextMenuListenerAdded) {
 		document.addEventListener('mousedown', function () {
 			const menu = document.querySelector('.other-contexts-menu');
@@ -725,7 +723,6 @@ function handleThumbFinish(data) {
 	// Update the Stored Models Page
 	updateStoredModelEntry(data);
 
-	// Ignore the remaining updates if the user has since switched .hip files.
 	if (data.hipFile !== nodeGraphManager.getLatestUUID()) {
 		return;
 	}
@@ -760,7 +757,6 @@ function updateStoredModelEntry(data) {
 }
 
 function handleRenderFinish(data) {
-	// Ignore renders from a previously loaded .hip file.
 	if (data.hipFile !== nodeGraphManager.getLatestUUID()) {
 		return;
 	}
@@ -794,8 +790,6 @@ function handleRopFinish(data) {
 }
 
 function startRenderTask(node) {
-	// Poppers for previously selected nodes remain in the DOM, so only
-	// query the frame inputs within this node's popper.
 	const popperDiv = document.getElementById(`${node.id()}_popper`);
 	const startFrameInput = popperDiv.querySelector('#start-frame');
 	const endFrameInput = popperDiv.querySelector('#end-frame');

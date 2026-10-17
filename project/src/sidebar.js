@@ -127,7 +127,6 @@ async function connectHIP() {
 	uploadForm.addEventListener('submit', async function (e) {
 		e.preventDefault();
 
-		// Avoid double submissions while an upload is in progress.
 		const uploadButton = this.querySelector('.upload-button');
 		if (uploadButton.disabled) {
 			return;

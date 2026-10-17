@@ -1,13 +1,5 @@
 FROM houdini-base
 
-COPY scripts/setup_hserver.sh /root/
-RUN chmod +x /root/setup_hserver.sh
-
-COPY . .
-
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements_app.txt
-
 # Run Flask App, binding to a Unix socket that will be used to communicate with nginx.
 # Loading a large .hip file blocks the eventlet worker, so allow more than the default 30s.
 CMD ["/bin/bash", "-c", "source /root/setup_hserver.sh && \

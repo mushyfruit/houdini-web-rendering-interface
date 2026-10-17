@@ -44,7 +44,6 @@ def generate_download_link():
             "error": "No filename was provided for download generation request."
         }), 400
 
-    # Clear out any expired links before storing the new one.
     current_time = time.time()
     for expired_id in [k for k, (_, expiry) in temporary_links.items() if current_time >= expiry]:
         del temporary_links[expired_id]
@@ -150,7 +149,6 @@ def download_rendered_sequence_zip():
     if not filename:
         return jsonify({"message": "No valid filename was provided to download."}), 400
 
-    # Render directories are always named by UUID, reject anything else (e.g. "/etc").
     file_uuid = filename.split(".")[0]
     if not is_valid_uuid(file_uuid):
         return jsonify({"message": "Invalid filename was provided to download."}), 400
@@ -240,8 +238,6 @@ def graph_data():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    # The Houdini session is shared between all users, so this only
-    # loads the .hip file if it isn't the one that's currently loaded.
     node_data = hou_api.scan_and_display_nodes(parent_node, hip_file=hip_file)
     if node_data is None:
         return jsonify({"error": "No node found at: {0}".format(parent_node)}), 404
@@ -287,7 +283,6 @@ def handle_upload():
         # Saved files are later located via a lowercase "<uuid>.hip*" search.
         filename = "{0}{1}".format(file_uuid, ext.lower())
 
-        # The user UUID is normally set on page load, but the upload may beat that request.
         if "user_uuid" not in session:
             session["user_uuid"] = str(uuid.uuid4())
 

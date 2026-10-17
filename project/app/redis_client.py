@@ -101,8 +101,6 @@ def add_unique_filename(redis_conn, user_uuid, original_filename, file_uuid, hip
     """
     file_hash = get_file_hash(hip_file)
 
-    # Only treat the upload as a duplicate if this user has already uploaded it.
-    # Another user uploading the same file should still receive their own copy.
     if not redis_conn.hexists(f"user:{user_uuid}:hash_to_uuid", file_hash):
         upload_time = _utc_now()
 

@@ -8,7 +8,6 @@ load_dotenv(os.path.join(basedir, '.env'))
 
 
 class Config(object):
-    # Set SECRET_KEY in the .env file to keep sessions valid across restarts.
     SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 
     # Match nginx's `client_max_body_size`.
