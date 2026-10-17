@@ -74,4 +74,9 @@ ENV HOUDINI_USE_HFS_OCL=0 \
 
 COPY scripts/setup_hserver.sh /root/
 
+# Non-root user for the Celery workers. Matches the usual host UID, so files written to the
+# bind mounts stay owned by the host user. `o+x` lets it reach the app code under /root.
+ARG APP_UID=1000
+RUN useradd --create-home --uid ${APP_UID} houdini && chmod o+x /root
+
 WORKDIR /root/hou_webserver

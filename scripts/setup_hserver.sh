@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Houdini 22 reads `hserver.ini` from `~/.local/share/sidefx`, older versions from `~/houdiniX.Y`.
-for hserver_dir in /root/houdini$HFS_TARGET /root/.local/share/sidefx; do
+for hserver_dir in "$HOME/houdini$HFS_TARGET" "$HOME/.local/share/sidefx"; do
     mkdir -p "$hserver_dir"
     echo "APIKey=www.sidefx.com $SIDEFX_CLIENT $SIDEFX_SECRET" > "$hserver_dir/hserver.ini"
 done
@@ -28,7 +28,7 @@ if [ -f /opt/houdini/build/dsolib/libiconv.so.2 ]; then
 fi
 
 # Set by hython, and required by SideFX Labs' pythonrc.py.
-export HOUDINI_USER_PREF_DIR="/root/houdini$HFS_TARGET"
+export HOUDINI_USER_PREF_DIR="$HOME/houdini$HFS_TARGET"
 
 # Python's own modules (e.g. ssl) load before `hou` and must resolve to Houdini's libraries.
 export LD_LIBRARY_PATH="/opt/houdini/build/dsolib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
