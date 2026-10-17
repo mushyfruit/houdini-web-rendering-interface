@@ -20,7 +20,9 @@ def get_logger(file_name, level=logging.INFO):
     log_dir = os.path.join(root_folder, "logs")
 
     log_file_path = os.path.join(log_dir, "{0}.log".format(file_name))
-    file_handler = logging.FileHandler(log_file_path)
+    # Only open the file once something is logged. Celery workers import this module but never
+    # log to it, and run as a different user, so they can't open a log file Flask has created.
+    file_handler = logging.FileHandler(log_file_path, delay=True)
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 

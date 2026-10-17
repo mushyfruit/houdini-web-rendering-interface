@@ -51,20 +51,26 @@ def render_rop(render_data, hip_path, force_png=False):
 
     out_node.setCachedUserData("socket_id", render_data["socket_id"])
 
-    out_path = None
+    out_parm = None
     for parm_name in cnst.FILE_OUTPUT_PARMS:
         parm = out_node.parm(parm_name)
         if parm is not None:
-            out_path = parm.unexpandedString()
-            logging.info("Rendering to: {0}".format(out_path))
+            out_parm = parm
+            logging.info("Rendering to: {0}".format(parm.unexpandedString()))
 
-    if not out_path:
+    if out_parm is None or not out_parm.unexpandedString():
         logging.error("No supported output path parameter found on: {0}".format(out_node_path))
         return
 
-    updated_render_path, render_id = generate_render_path(out_path, out_node,
+    updated_render_path, render_id = generate_render_path(out_parm.unexpandedString(), out_node,
                                                           render_data["file_uuid"],
                                                           force_png=force_png)
+
+    # Some ROPs ignore render()'s `output_file`, e.g. Karma renders through husk to its "picture"
+    # parm, so point the parm itself at the render path. The .hip is reloaded for each task.
+    out_parm.deleteAllKeyframes()
+    out_parm.set(updated_render_path, follow_parm_reference=False)
+
     frame_range_tuple = (render_data["start"], render_data["end"], render_data["step"])
 
     if force_png:

@@ -50,11 +50,15 @@ RUN test -d /opt/houdini/build/houdini/python${PYTHON_VER}libs || \
       ls -d /opt/houdini/build/houdini/python*libs; exit 1; }
 
 # Install the required libs for OpenCL, then point OpenCL to the correct implementation.
+# Karma XPU's GPU module links Qt, which needs the GL, EGL, xkbcommon and D-Bus libs to load.
+# It also loads `libcuda.so`, while the NVIDIA Container Toolkit only provides `libcuda.so.1`.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ocl-icd-libopencl1 && \
+    apt-get install -y --no-install-recommends ocl-icd-libopencl1 \
+        libopengl0 libegl1 libxkbcommon0 libdbus-1-3 && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p /etc/OpenCL/vendors && \
-    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
+    echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd && \
+    ln -s libcuda.so.1 /usr/lib/x86_64-linux-gnu/libcuda.so
 
 COPY requirements_app.txt /tmp/
 RUN pip install --no-cache-dir -r /tmp/requirements_app.txt && rm /tmp/requirements_app.txt
@@ -65,18 +69,21 @@ ENV HFS_TARGET=$HFS_VER \
     PYTHONPATH="/opt/houdini/build/houdini/python${PYTHON_VER}libs"
 
 # Expose all available GPU devices to the docker container.
+# Karma XPU's OptiX libraries are only mounted with the "graphics" capability.
 ENV NVIDIA_VISIBLE_DEVICES=all \
-    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
 
-# Stop Houdini from conflicting with our drivers!
-ENV HOUDINI_USE_HFS_OCL=0 \
-    HOUDINI_OCL_DEVICETYPE=GPU
+# Use the GPU for OpenCL. Without one, Houdini falls back to its built-in CPU OpenCL driver.
+ENV HOUDINI_OCL_DEVICETYPE=GPU
 
 COPY scripts/setup_hserver.sh /root/
 
 # Non-root user for the Celery workers. Matches the usual host UID, so files written to the
 # bind mounts stay owned by the host user. `o+x` lets it reach the app code under /root.
+# Renders write next to the uploaded .hip files (e.g. Karma's `$HIP/render` checkpoints), so the
+# workers need write access to the uploads folder. A new named volume copies this ownership.
 ARG APP_UID=1000
-RUN useradd --create-home --uid ${APP_UID} houdini && chmod o+x /root
+RUN useradd --create-home --uid ${APP_UID} houdini && chmod o+x /root && \
+    mkdir -p /root/hip_storage && chown houdini:houdini /root/hip_storage
 
 WORKDIR /root/hou_webserver

@@ -79,6 +79,8 @@ Ensure you have the following installed on your system first:
   You should see a printout of your GPU information.
 - Give the Celery render workers access to the GPU by uncommenting the `deploy` section of the `celery` service
   in `compose.yaml`.
+- The render workers then use the GPU for OpenCL nodes and Karma XPU renders. Without a GPU, OpenCL runs on the CPU
+  and Karma XPU renders on its CPU device.
 
 
 ## Troubleshooting
@@ -88,8 +90,8 @@ Ensure you have the following installed on your system first:
       to [install Docker Compose](https://docs.docker.com/compose/install/) manually.
 - **Network Access**: Verify that your device is connected to the same local network.
 - **Container Logs**: Check the container logs for any error messages by running: `docker compose logs`
-- **OpenCL Issues**: If you do not intend to use OpenCL in the container, leave the `deploy` section of the `celery`
-  service in `compose.yaml` commented out.
+- **OpenCL Issues**: If the `deploy` section of the `celery` service is uncommented, the NVIDIA Container Toolkit
+  must be installed for the container to start. Leave it commented out to run OpenCL on the CPU instead.
 - **`import hou` Errors**: Ensure `PYTHON_VER` matches the Python version of your Houdini build (see above).
 
 ## Downloading Houdini Separately
