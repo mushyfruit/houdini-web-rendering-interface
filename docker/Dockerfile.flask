@@ -1,14 +1,16 @@
 FROM houdini-base
 
 # Run Flask App, binding to a Unix socket that will be used to communicate with nginx.
-# Loading a large .hip file blocks the eventlet worker, so allow more than the default 30s.
+# A single worker, as the Houdini session and Socket.IO state live in-process. Each open
+# websocket holds a thread. Loading a large .hip file can take a while, so allow more than 30s.
 # On shutdown, quit hserver so the Houdini license is returned rather than left checked out.
 CMD ["/bin/bash", "-c", "source /root/setup_hserver.sh || exit 1; \
 gunicorn --bind unix:/run/flask-socket/flask_app.sock server:app --log-level info \
+    --workers 1 \
+    --threads 100 \
     --timeout 300 \
     --capture-output \
     --access-logfile - \
-    --enable-stdio-inheritance \
-    -k eventlet & \
+    --enable-stdio-inheritance & \
 trap 'hserver -Q; kill -TERM $!' TERM INT; \
 wait"]

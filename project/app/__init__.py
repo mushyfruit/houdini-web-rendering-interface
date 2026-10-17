@@ -45,7 +45,7 @@ def create_app(config_class=Config):
 
     sess.init_app(app)
 
-    socketio.init_app(app, async_mode='eventlet')
+    socketio.init_app(app, async_mode='threading')
 
     celery_init_app(app)
 

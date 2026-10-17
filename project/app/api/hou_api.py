@@ -34,6 +34,9 @@ from app.api import socket_update, utils
 _icon_mapping = {}
 _redis_thread = None
 
+# The Houdini session is shared, so only one request may use it at a time.
+_hou_lock = threading.Lock()
+
 
 def get_hip_path(file_uuid):
     """Locate the uploaded .hip, .hiplc, or .hipnc file for the given UUID."""
@@ -74,12 +77,12 @@ def ensure_hip_loaded(hip_file):
 
 
 def scan_and_display_nodes(parent_node, hip_file):
-    ensure_hip_loaded(hip_file)
-    root_node = hou.node(parent_node)
-    if root_node is None:
-        return None
-    obj_dict = process_hip_for_node_structure(root_node)
-    return obj_dict
+    with _hou_lock:
+        ensure_hip_loaded(hip_file)
+        root_node = hou.node(parent_node)
+        if root_node is None:
+            return None
+        return process_hip_for_node_structure(root_node)
 
 
 def process_hip_for_node_structure(root_node):
@@ -198,10 +201,15 @@ def locate_and_store_icon(contents,
 
 
 def submit_node_for_render(render_struct, hip_path):
+    with _hou_lock:
+        return _submit_node_for_render(render_struct, hip_path)
+
+
+def _submit_node_for_render(render_struct, hip_path):
     global _redis_thread
     if _redis_thread is None or not _redis_thread.is_alive():
         _redis_thread = threading.Thread(
-            target=socket_update.listen_to_celery_workers)
+            target=socket_update.listen_to_celery_workers, daemon=True)
         _redis_thread.start()
 
     ensure_hip_loaded(hip_path)
