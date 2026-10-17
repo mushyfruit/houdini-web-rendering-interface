@@ -43,6 +43,9 @@ services:
         dockerfile: docker/Dockerfile.celery
         additional_contexts:
           houdini-base: "service:houdini_base"
+    # Share the Flask container's hserver, so both use a single Houdini license.
+    network_mode: "service:hou_flask_app"
+    pid: "service:hou_flask_app"
     volumes:
       - ./nginx:/var/model_storage:z
       - ./project:/root/hou_webserver:z

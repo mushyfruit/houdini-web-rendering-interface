@@ -2,10 +2,13 @@ FROM houdini-base
 
 # Run Flask App, binding to a Unix socket that will be used to communicate with nginx.
 # Loading a large .hip file blocks the eventlet worker, so allow more than the default 30s.
-CMD ["/bin/bash", "-c", "source /root/setup_hserver.sh && \
+# On shutdown, quit hserver so the Houdini license is returned rather than left checked out.
+CMD ["/bin/bash", "-c", "source /root/setup_hserver.sh || exit 1; \
 gunicorn --bind unix:/run/flask-socket/flask_app.sock server:app --log-level info \
     --timeout 300 \
     --capture-output \
     --access-logfile - \
     --enable-stdio-inheritance \
-    -k eventlet"]
+    -k eventlet & \
+trap 'hserver -Q; kill -TERM $!' TERM INT; \
+wait"]
